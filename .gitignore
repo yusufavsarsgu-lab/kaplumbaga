@@ -1,0 +1,12 @@
+node_modules/
+dist/
+artifacts/
+frontend/android/.gradle/
+frontend/android/app/build/
+frontend/android/build/
+.env
+.env.local
+.DS_Store
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
