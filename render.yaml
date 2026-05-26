@@ -1,28 +1,34 @@
+databases:
+  - name: kaplumbaga-db
+    plan: free
+    databaseName: kaplumbaga
+    user: kaplumbaga
+
 services:
   - type: web
     name: kaplumbaga-api
-    env: node
+    runtime: node
+    plan: free
     rootDir: backend
     buildCommand: npm install && npm run build:render
     startCommand: npm run start
+    healthCheckPath: /health
     envVars:
       - key: PORT
         value: 4000
       - key: NODE_ENV
         value: production
       - key: CLIENT_URL
-        sync: false
+        value: https://kaplumbaga-chat.netlify.app
       - key: DATABASE_URL
-        sync: false
+        fromDatabase:
+          name: kaplumbaga-db
+          property: connectionString
       - key: JWT_SECRET
-        sync: false
+        generateValue: true
       - key: TRANSLATION_PROVIDER
         value: local
-      - key: OPENAI_API_KEY
-        sync: false
-      - key: GOOGLE_TRANSLATE_API_KEY
-        sync: false
       - key: SEED_YUSUF_PASSWORD
-        sync: false
+        value: "123456"
       - key: SEED_NEEJA_PASSWORD
-        sync: false
+        value: "123456"
