@@ -25,7 +25,7 @@ function getErrorMessage(error: unknown, t: (key: string) => string): string {
   if (typeof error === 'object' && error && 'message' in error) {
     const message = String((error as { message?: unknown }).message);
     if (message === 'missing_credentials') return t('credentialsRequired');
-    return t('invalidCredentials');
+    if (message === 'invalid_credentials') return t('invalidCredentials');
   }
 
   return t('serverUnavailable');

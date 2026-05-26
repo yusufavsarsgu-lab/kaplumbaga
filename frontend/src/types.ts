@@ -1,6 +1,7 @@
 export type Language = 'tr' | 'th';
 export type MessageType = 'text' | 'image';
 export type TranslationStatus = 'translated' | 'fallback';
+export type DeliveryStatus = 'sent' | 'delivered' | 'read';
 
 export interface AppUser {
   id: string;
@@ -22,6 +23,7 @@ export interface ChatMessage {
   sourceLang: Language;
   targetLang: Language;
   status: TranslationStatus;
+  deliveryStatus?: DeliveryStatus;
 }
 
 export interface LoginResponse {

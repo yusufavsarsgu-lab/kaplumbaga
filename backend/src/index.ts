@@ -13,6 +13,7 @@ const httpServer = createServer(app);
 type Language = 'tr' | 'th';
 type MessageType = 'text' | 'image';
 type TranslationStatus = 'translated' | 'fallback';
+type DeliveryStatus = 'sent' | 'delivered' | 'read';
 
 interface PublicUser {
   id: string;
@@ -42,14 +43,17 @@ interface ChatMessage {
   sourceLang: Language;
   targetLang: Language;
   status: TranslationStatus;
+  deliveryStatus: DeliveryStatus;
 }
 
 interface ClientToServerEvents {
   register: (user: PublicUser) => void;
   send_message: (payload: { text: string; from: string; to: string; type?: MessageType }) => void;
+  mark_read: (data: { messageIds: string[]; readBy: string }) => void;
   typing: (data: { from: string; to: string }) => void;
-  call_user: (data: { from: string; to: string; signal: unknown }) => void;
-  accept_call: (data: { to: string; signal: unknown }) => void;
+  call_offer: (data: { from: string; to: string; offer: unknown }) => void;
+  call_answer: (data: { to: string; answer: unknown }) => void;
+  ice_candidate: (data: { to: string; candidate: unknown }) => void;
   end_call: (data: { to: string }) => void;
 }
 
@@ -60,8 +64,10 @@ interface ServerToClientEvents {
   chat_history: (messages: ChatMessage[]) => void;
   receive_message: (message: ChatMessage) => void;
   typing: (data: { from: string; to: string }) => void;
-  incoming_call: (data: { from: string; signal: unknown }) => void;
-  call_accepted: (data: { signal: unknown }) => void;
+  messages_status_updated: (data: { messageIds: string[]; status: DeliveryStatus }) => void;
+  incoming_call: (data: { from: string; offer: unknown }) => void;
+  call_accepted: (data: { answer: unknown }) => void;
+  ice_candidate: (data: { candidate: unknown }) => void;
   call_ended: () => void;
   app_error: (error: { message: string }) => void;
 }
@@ -187,12 +193,32 @@ io.on('connection', (socket) => {
       sourceLang: translation.sourceLang,
       targetLang: translation.targetLang,
       status: translation.status,
+      deliveryStatus: onlineUsers.has(receiver.id) ? 'delivered' : 'sent',
     };
 
     messages.push(msg);
     if (messages.length > 200) messages.shift();
 
     io.emit('receive_message', msg);
+  });
+
+  socket.on('mark_read', (data) => {
+    const updated: string[] = [];
+    for (const msg of messages) {
+      if (data.messageIds.includes(msg.id) && msg.to === data.readBy && msg.deliveryStatus !== 'read') {
+        msg.deliveryStatus = 'read';
+        updated.push(msg.id);
+      }
+    }
+    if (updated.length > 0) {
+      const sender = messages.find((m) => updated.includes(m.id));
+      if (sender) {
+        const senderOnline = onlineUsers.get(sender.from);
+        if (senderOnline) {
+          io.to(senderOnline.socketId).emit('messages_status_updated', { messageIds: updated, status: 'read' });
+        }
+      }
+    }
   });
 
   socket.on('typing', (data) => {
@@ -202,17 +228,24 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('call_user', (data) => {
+  socket.on('call_offer', (data) => {
     const receiver = onlineUsers.get(data.to);
     if (receiver) {
-      io.to(receiver.socketId).emit('incoming_call', { from: data.from, signal: data.signal });
+      io.to(receiver.socketId).emit('incoming_call', { from: data.from, offer: data.offer });
     }
   });
 
-  socket.on('accept_call', (data) => {
+  socket.on('call_answer', (data) => {
     const caller = onlineUsers.get(data.to);
     if (caller) {
-      io.to(caller.socketId).emit('call_accepted', { signal: data.signal });
+      io.to(caller.socketId).emit('call_accepted', { answer: data.answer });
+    }
+  });
+
+  socket.on('ice_candidate', (data) => {
+    const peer = onlineUsers.get(data.to);
+    if (peer) {
+      io.to(peer.socketId).emit('ice_candidate', { candidate: data.candidate });
     }
   });
 

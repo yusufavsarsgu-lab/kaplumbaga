@@ -1,4 +1,5 @@
 import React from 'react';
+import { Check, CheckCheck } from 'lucide-react';
 import { useI18n } from '../i18n';
 import { useSettingsStore } from '../store/settingsStore';
 import type { ChatMessage } from '../types';
@@ -48,8 +49,15 @@ const MessageBubble: React.FC<Props> = ({ message, isMe }) => {
           </p>
         )}
 
-        <span className={`mt-1 block text-right text-[10px] ${isMe ? 'text-green-50' : 'text-gray-400'}`}>
+        <span className={`mt-1 flex items-center justify-end gap-1 text-[10px] ${isMe ? 'text-green-50' : 'text-gray-400'}`}>
           {time}
+          {isMe && (
+            message.deliveryStatus === 'read'
+              ? <CheckCheck className="h-3.5 w-3.5 text-blue-300" />
+              : message.deliveryStatus === 'delivered'
+                ? <CheckCheck className="h-3.5 w-3.5" />
+                : <Check className="h-3.5 w-3.5" />
+          )}
         </span>
       </div>
     </div>

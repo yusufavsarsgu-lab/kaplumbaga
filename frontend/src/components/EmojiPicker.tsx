@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Smile } from 'lucide-react';
 import { useI18n } from '../i18n';
 
@@ -11,9 +11,31 @@ const EmojiPicker: React.FC<Props> = ({ onSelect }) => {
   const [activeCategory, setActiveCategory] = useState(0);
   const { emojiCategories, t } = useI18n();
   const category = emojiCategories[activeCategory] ?? emojiCategories[0];
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+
+    const handleClickOutside = (event: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    };
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setOpen(false);
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleEscape);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleEscape);
+    };
+  }, [open]);
 
   return (
-    <div className="relative flex-shrink-0">
+    <div ref={containerRef} className="relative flex-shrink-0">
       <button
         type="button"
         onClick={() => setOpen((value) => !value)}

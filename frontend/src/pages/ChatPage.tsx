@@ -1,9 +1,10 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Send, X } from 'lucide-react';
+import { Phone, PhoneOff, Send, X } from 'lucide-react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { useI18n } from '../i18n';
 import { useAuthStore } from '../store/authStore';
 import { useSettingsStore } from '../store/settingsStore';
+import { useCallStore } from '../store/callStore';
 import { connectSocket, disconnectSocket, socket } from '../services/socket';
 import UserHeader from '../components/UserHeader';
 import MessageBubble from '../components/MessageBubble';
@@ -11,7 +12,7 @@ import ChatInput from '../components/ChatInput';
 import EmojiPicker from '../components/EmojiPicker';
 import QuickMessages from '../components/QuickMessages';
 import ImageUploadButton from '../components/ImageUploadButton';
-import type { AppUser, ChatMessage } from '../types';
+import type { AppUser, ChatMessage, DeliveryStatus } from '../types';
 
 const ChatPage: React.FC = () => {
   const user = useAuthStore((state) => state.user);
@@ -49,10 +50,24 @@ const ChatPage: React.FC = () => {
         if (previous.some((item) => item.id === message.id)) return previous;
         return [...previous, message];
       });
+      if (message.from === otherUser.id && message.to === user.id) {
+        socket.emit('mark_read', { messageIds: [message.id], readBy: user.id });
+      }
     };
 
     const onHistory = (history: ChatMessage[]) => {
-      setMessages(history.filter(isConversationMessage));
+      const filtered = history.filter(isConversationMessage);
+      setMessages(filtered);
+      const unread = filtered.filter((m) => m.from === otherUser.id && m.to === user.id && m.deliveryStatus !== 'read');
+      if (unread.length > 0) {
+        socket.emit('mark_read', { messageIds: unread.map((m) => m.id), readBy: user.id });
+      }
+    };
+
+    const onStatusUpdated = (data: { messageIds: string[]; status: DeliveryStatus }) => {
+      setMessages((prev) =>
+        prev.map((m) => (data.messageIds.includes(m.id) ? { ...m, deliveryStatus: data.status } : m))
+      );
     };
 
     const onTyping = (data: { from: string; to: string }) => {
@@ -82,6 +97,16 @@ const ChatPage: React.FC = () => {
       setAppError(t('errorOccurred'));
     };
 
+    const onIncomingCall = (data: { from: string; offer: unknown }) => {
+      if (data.from === otherUser.id) {
+        setIncomingCall({ from: data.from, offer: data.offer as RTCSessionDescriptionInit });
+      }
+    };
+
+    const onCallEnded = () => {
+      setIncomingCall(null);
+    };
+
     socket.on('receive_message', onMessage);
     socket.on('chat_history', onHistory);
     socket.on('typing', onTyping);
@@ -89,6 +114,9 @@ const ChatPage: React.FC = () => {
     socket.on('user_online', onUserOnline);
     socket.on('user_offline', onUserOffline);
     socket.on('app_error', onAppError);
+    socket.on('incoming_call', onIncomingCall);
+    socket.on('call_ended', onCallEnded);
+    socket.on('messages_status_updated', onStatusUpdated);
 
     connectSocket();
     socket.emit('register', user);
@@ -101,6 +129,9 @@ const ChatPage: React.FC = () => {
       socket.off('user_online', onUserOnline);
       socket.off('user_offline', onUserOffline);
       socket.off('app_error', onAppError);
+      socket.off('incoming_call', onIncomingCall);
+      socket.off('call_ended', onCallEnded);
+      socket.off('messages_status_updated', onStatusUpdated);
 
       if (typingTimeoutRef.current) {
         window.clearTimeout(typingTimeoutRef.current);
@@ -111,6 +142,20 @@ const ChatPage: React.FC = () => {
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, typing]);
+
+  const setIncomingCall = useCallStore((state) => state.setIncomingCall);
+  const incomingCall = useCallStore((state) => state.incomingCall);
+
+  const acceptCall = () => {
+    navigate('/video');
+  };
+
+  const rejectCall = () => {
+    if (otherUser) {
+      socket.emit('end_call', { to: otherUser.id });
+    }
+    setIncomingCall(null);
+  };
 
   if (!user || !otherUser) {
     return <Navigate to="/" replace />;
@@ -151,6 +196,38 @@ const ChatPage: React.FC = () => {
 
   return (
     <div className="flex h-[100dvh] flex-col overflow-hidden bg-cream-50">
+      {incomingCall && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="mx-4 w-full max-w-sm rounded-2xl bg-white p-6 text-center shadow-2xl">
+            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-turtle-100 text-2xl font-bold text-turtle-800">
+              {otherUser.avatar}
+            </div>
+            <h3 className="mt-4 text-lg font-semibold text-gray-900">{t('incomingCall')}</h3>
+            <p className="mt-1 text-sm text-gray-500">
+              {t('incomingCallFrom', { name: otherUser.displayName })}
+            </p>
+            <div className="mt-6 flex justify-center gap-4">
+              <button
+                type="button"
+                onClick={rejectCall}
+                className="flex h-14 w-14 items-center justify-center rounded-full bg-red-600 text-white shadow-lg transition hover:bg-red-700"
+                title={t('reject')}
+              >
+                <PhoneOff className="h-6 w-6" />
+              </button>
+              <button
+                type="button"
+                onClick={acceptCall}
+                className="flex h-14 w-14 items-center justify-center rounded-full bg-green-600 text-white shadow-lg transition hover:bg-green-700"
+                title={t('accept')}
+              >
+                <Phone className="h-6 w-6" />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <UserHeader
         name={otherUser.displayName}
         lang={otherUser.language}
