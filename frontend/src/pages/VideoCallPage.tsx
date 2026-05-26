@@ -73,7 +73,7 @@ const VideoCallPage: React.FC = () => {
 
       pc.onicecandidate = (event) => {
         if (event.candidate) {
-          socket.emit('ice_candidate', { to: otherUser.id, candidate: event.candidate.toJSON() });
+          socket.emit('ice_candidate', { to: otherUser!.id, candidate: event.candidate.toJSON() });
         }
       };
 
