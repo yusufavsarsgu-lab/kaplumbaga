@@ -26,7 +26,7 @@ const MessageBubble: React.FC<Props> = ({ message, isMe }) => {
     canShowSecondary &&
     message.type !== 'image' &&
     Boolean(secondaryText) &&
-    secondaryText.trim().toLocaleLowerCase('tr-TR') !== primaryText.trim().toLocaleLowerCase('tr-TR');
+    secondaryText.trim().toLowerCase() !== primaryText.trim().toLowerCase();
 
   return (
     <div className={`mb-3 flex ${isMe ? 'justify-end' : 'justify-start'}`}>

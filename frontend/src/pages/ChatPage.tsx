@@ -12,6 +12,7 @@ import ChatInput from '../components/ChatInput';
 import EmojiPicker from '../components/EmojiPicker';
 import QuickMessages from '../components/QuickMessages';
 import ImageUploadButton from '../components/ImageUploadButton';
+import VideoCallOverlay from '../components/VideoCallOverlay';
 import type { AppUser, ChatMessage, DeliveryStatus } from '../types';
 
 const ChatPage: React.FC = () => {
@@ -105,6 +106,7 @@ const ChatPage: React.FC = () => {
 
     const onCallEnded = () => {
       setIncomingCall(null);
+      // VideoCallOverlay kendi endCall'ını da dinliyor, burada sadece incoming dialog'u kapatıyoruz
     };
 
     socket.on('receive_message', onMessage);
@@ -145,9 +147,11 @@ const ChatPage: React.FC = () => {
 
   const setIncomingCall = useCallStore((state) => state.setIncomingCall);
   const incomingCall = useCallStore((state) => state.incomingCall);
+  const startCall = useCallStore((state) => state.startCall);
+  const isInCall = useCallStore((state) => state.isInCall);
 
   const acceptCall = () => {
-    navigate('/video');
+    startCall();
   };
 
   const rejectCall = () => {
@@ -196,7 +200,7 @@ const ChatPage: React.FC = () => {
 
   return (
     <div className="flex h-[100dvh] flex-col overflow-hidden bg-cream-50">
-      {incomingCall && (
+      {incomingCall && !isInCall && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
           <div className="mx-4 w-full max-w-sm rounded-2xl bg-white p-6 text-center shadow-2xl">
             <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-turtle-100 text-2xl font-bold text-turtle-800">
@@ -228,13 +232,15 @@ const ChatPage: React.FC = () => {
         </div>
       )}
 
+      <VideoCallOverlay />
+
       <UserHeader
         name={otherUser.displayName}
         lang={otherUser.language}
         selfName={user.displayName}
         selfLang={user.language}
         online={otherOnline}
-        onVideoCall={() => navigate('/video')}
+        onVideoCall={() => { if (!isInCall) startCall(); }}
         onSettings={() => navigate('/settings')}
         onLogout={handleLogout}
       />
