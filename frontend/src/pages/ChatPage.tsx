@@ -18,6 +18,7 @@ import type { AppUser, ChatMessage, DeliveryStatus } from '../types';
 const ChatPage: React.FC = () => {
   const user = useAuthStore((state) => state.user);
   const otherUser = useAuthStore((state) => state.otherUser);
+  const token = useAuthStore((state) => state.token);
   const logout = useAuthStore((state) => state.logout);
   const typingIndicatorEnabled = useSettingsStore((state) => state.typingIndicatorEnabled);
   const navigate = useNavigate();
@@ -43,7 +44,7 @@ const ChatPage: React.FC = () => {
   );
 
   useEffect(() => {
-    if (!user || !otherUser) return;
+    if (!user || !otherUser || !token) return;
 
     const onMessage = (message: ChatMessage) => {
       if (!isConversationMessage(message)) return;
@@ -52,7 +53,7 @@ const ChatPage: React.FC = () => {
         return [...previous, message];
       });
       if (message.from === otherUser.id && message.to === user.id) {
-        socket.emit('mark_read', { messageIds: [message.id], readBy: user.id });
+        socket.emit('mark_read', { messageIds: [message.id] });
       }
     };
 
@@ -61,7 +62,7 @@ const ChatPage: React.FC = () => {
       setMessages(filtered);
       const unread = filtered.filter((m) => m.from === otherUser.id && m.to === user.id && m.deliveryStatus !== 'read');
       if (unread.length > 0) {
-        socket.emit('mark_read', { messageIds: unread.map((m) => m.id), readBy: user.id });
+        socket.emit('mark_read', { messageIds: unread.map((m) => m.id) });
       }
     };
 
@@ -106,7 +107,6 @@ const ChatPage: React.FC = () => {
 
     const onCallEnded = () => {
       setIncomingCall(null);
-      // VideoCallOverlay kendi endCall'ını da dinliyor, burada sadece incoming dialog'u kapatıyoruz
     };
 
     socket.on('receive_message', onMessage);
@@ -120,8 +120,8 @@ const ChatPage: React.FC = () => {
     socket.on('call_ended', onCallEnded);
     socket.on('messages_status_updated', onStatusUpdated);
 
-    connectSocket();
-    socket.emit('register', user);
+    connectSocket(token);
+    socket.emit('register');
 
     return () => {
       socket.off('receive_message', onMessage);
@@ -139,7 +139,7 @@ const ChatPage: React.FC = () => {
         window.clearTimeout(typingTimeoutRef.current);
       }
     };
-  }, [isConversationMessage, otherUser, t, typingIndicatorEnabled, user]);
+  }, [isConversationMessage, otherUser, t, token, typingIndicatorEnabled, user]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -161,7 +161,7 @@ const ChatPage: React.FC = () => {
     setIncomingCall(null);
   };
 
-  if (!user || !otherUser) {
+  if (!user || !otherUser || !token) {
     return <Navigate to="/" replace />;
   }
 
@@ -171,14 +171,13 @@ const ChatPage: React.FC = () => {
 
     socket.emit('send_message', {
       text: value,
-      from: user.id,
       to: otherUser.id,
       type,
     });
   };
 
   const handleTyping = () => {
-    socket.emit('typing', { from: user.id, to: otherUser.id });
+    socket.emit('typing', { to: otherUser.id });
   };
 
   const appendToDraft = (text: string) => {

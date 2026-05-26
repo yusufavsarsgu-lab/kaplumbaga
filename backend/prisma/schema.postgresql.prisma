@@ -1,0 +1,89 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Language {
+  tr
+  th
+}
+
+enum MessageType {
+  text
+  image
+}
+
+enum TranslationStatus {
+  translated
+  fallback
+}
+
+enum DeliveryStatus {
+  sent
+  delivered
+  read
+}
+
+enum CallStatus {
+  ringing
+  accepted
+  ended
+  missed
+}
+
+model User {
+  id           String    @id @default(cuid())
+  username     String    @unique
+  passwordHash String
+  displayName  String
+  language     Language
+  avatarUrl    String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  sentMessages     Message[] @relation("SentMessages")
+  receivedMessages Message[] @relation("ReceivedMessages")
+  outgoingCalls    CallLog[] @relation("OutgoingCalls")
+  incomingCalls    CallLog[] @relation("IncomingCalls")
+}
+
+model Message {
+  id                String            @id @default(cuid())
+  senderId          String
+  receiverId        String
+  type              MessageType
+  originalText      String?
+  translatedText    String?
+  sourceLang        Language
+  targetLang        Language
+  translationStatus TranslationStatus
+  imageData         String?
+  imageUrl          String?
+  deliveryStatus    DeliveryStatus    @default(sent)
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  sender   User @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
+  receiver User @relation("ReceivedMessages", fields: [receiverId], references: [id], onDelete: Cascade)
+
+  @@index([senderId, receiverId, createdAt])
+  @@index([receiverId, deliveryStatus])
+}
+
+model CallLog {
+  id         String     @id @default(cuid())
+  callerId   String
+  receiverId String
+  status     CallStatus
+  startedAt  DateTime   @default(now())
+  endedAt    DateTime?
+
+  caller   User @relation("OutgoingCalls", fields: [callerId], references: [id], onDelete: Cascade)
+  receiver User @relation("IncomingCalls", fields: [receiverId], references: [id], onDelete: Cascade)
+
+  @@index([callerId, receiverId, startedAt])
+}

@@ -1,10 +1,11 @@
 import 'dotenv/config';
 import express from 'express';
 import { createServer } from 'http';
-import { Server } from 'socket.io';
+import { Server, type Socket } from 'socket.io';
 import cors from 'cors';
 import authRoutes from './routes/auth';
-import users from './data/users.json';
+import { prisma } from './db/prisma';
+import { getBearerToken, verifyAuthToken } from './services/AuthService';
 import { translateText } from './services/TranslationService';
 
 const app = express();
@@ -21,10 +22,6 @@ interface PublicUser {
   displayName: string;
   language: Language;
   avatar: string;
-}
-
-interface StoredUser extends PublicUser {
-  password: string;
 }
 
 interface OnlineUser extends PublicUser {
@@ -47,11 +44,11 @@ interface ChatMessage {
 }
 
 interface ClientToServerEvents {
-  register: (user: PublicUser) => void;
-  send_message: (payload: { text: string; from: string; to: string; type?: MessageType }) => void;
-  mark_read: (data: { messageIds: string[]; readBy: string }) => void;
-  typing: (data: { from: string; to: string }) => void;
-  call_offer: (data: { from: string; to: string; offer: unknown }) => void;
+  register: (user?: PublicUser) => void;
+  send_message: (payload: { text: string; from?: string; to: string; type?: MessageType }) => void;
+  mark_read: (data: { messageIds: string[]; readBy?: string }) => void;
+  typing: (data: { from?: string; to: string }) => void;
+  call_offer: (data: { from?: string; to: string; offer: unknown }) => void;
   call_answer: (data: { to: string; answer: unknown }) => void;
   ice_candidate: (data: { to: string; candidate: unknown }) => void;
   end_call: (data: { to: string }) => void;
@@ -80,10 +77,7 @@ interface SocketData {
   userId?: string;
 }
 
-const storedUsers = users as StoredUser[];
-const publicUsers = new Map<string, PublicUser>(
-  storedUsers.map(({ password: _password, ...user }) => [user.id, user])
-);
+type KaplumbagaSocket = Socket<ClientToServerEvents, ServerToClientEvents, InterServerEvents, SocketData>;
 
 const localHostName = 'local' + 'host';
 const loopbackHostName = ['127', '0', '0', '1'].join('.');
@@ -91,6 +85,10 @@ const defaultClientUrls = [`http://${localHostName}:5173`, `http://${loopbackHos
 const allowedOrigins = (process.env.CLIENT_URL ? process.env.CLIENT_URL.split(',') : defaultClientUrls)
   .map((origin) => origin.trim())
   .filter(Boolean);
+
+if (process.env.NODE_ENV === 'production' && !process.env.JWT_SECRET?.trim()) {
+  throw new Error('JWT_SECRET is required in production.');
+}
 
 const corsOptions: cors.CorsOptions = {
   origin(origin, callback) {
@@ -110,10 +108,11 @@ const io = new Server<ClientToServerEvents, ServerToClientEvents, InterServerEve
     methods: ['GET', 'POST'],
     credentials: true,
   },
+  maxHttpBufferSize: 4_500_000,
 });
 
 app.use(cors(corsOptions));
-app.use(express.json());
+app.use(express.json({ limit: '4mb' }));
 
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok', service: 'kaplumbaga-api' });
@@ -122,157 +121,309 @@ app.get('/health', (_req, res) => {
 app.use('/api/auth', authRoutes);
 
 const onlineUsers = new Map<string, OnlineUser>();
-const messages: ChatMessage[] = [];
 
-function getPublicUser(id: string): PublicUser | undefined {
-  return publicUsers.get(id);
+function toPublicUser(user: {
+  id: string;
+  username: string;
+  displayName: string;
+  language: string;
+  avatarUrl: string | null;
+}): PublicUser {
+  return {
+    id: user.id,
+    username: user.username,
+    displayName: user.displayName,
+    language: toLanguage(user.language),
+    avatar: user.avatarUrl || user.displayName.slice(0, 1).toUpperCase(),
+  };
+}
+
+function toLanguage(value: string): Language {
+  return value === 'th' ? 'th' : 'tr';
+}
+
+function toMessageType(value: string): MessageType {
+  return value === 'image' ? 'image' : 'text';
+}
+
+function toTranslationStatus(value: string): TranslationStatus {
+  return value === 'translated' ? 'translated' : 'fallback';
+}
+
+function toDeliveryStatus(value: string): DeliveryStatus {
+  if (value === 'read') return 'read';
+  if (value === 'delivered') return 'delivered';
+  return 'sent';
+}
+
+function toChatMessage(message: {
+  id: string;
+  senderId: string;
+  receiverId: string;
+  type: string;
+  originalText: string | null;
+  translatedText: string | null;
+  sourceLang: string;
+  targetLang: string;
+  translationStatus: string;
+  imageData: string | null;
+  imageUrl: string | null;
+  deliveryStatus: string;
+  createdAt: Date;
+}): ChatMessage {
+  const type = toMessageType(message.type);
+  const originalText = type === 'image' ? message.imageData || message.imageUrl || '' : message.originalText || '';
+  const translatedText = type === 'image' ? originalText : message.translatedText || originalText;
+
+  return {
+    id: message.id,
+    text: translatedText,
+    translatedText,
+    originalText,
+    from: message.senderId,
+    to: message.receiverId,
+    timestamp: message.createdAt.toISOString(),
+    type,
+    sourceLang: toLanguage(message.sourceLang),
+    targetLang: toLanguage(message.targetLang),
+    status: toTranslationStatus(message.translationStatus),
+    deliveryStatus: toDeliveryStatus(message.deliveryStatus),
+  };
+}
+
+async function getPublicUser(id: string): Promise<PublicUser | null> {
+  const user = await prisma.user.findUnique({ where: { id } });
+  return user ? toPublicUser(user) : null;
 }
 
 function getOnlinePublicUsers(): PublicUser[] {
   return Array.from(onlineUsers.values()).map(({ socketId: _socketId, ...user }) => user);
 }
 
-function getConversationMessages(userId: string): ChatMessage[] {
-  return messages.filter((message) => message.from === userId || message.to === userId);
+async function getConversationMessages(userId: string): Promise<ChatMessage[]> {
+  const messages = await prisma.message.findMany({
+    where: {
+      OR: [{ senderId: userId }, { receiverId: userId }],
+    },
+    orderBy: { createdAt: 'asc' },
+    take: 500,
+  });
+
+  return messages.map(toChatMessage);
 }
 
-io.on('connection', (socket) => {
-  console.info(`[socket] connected ${socket.id}`);
+function emitToUser<K extends keyof ServerToClientEvents>(
+  userId: string,
+  event: K,
+  ...payload: Parameters<ServerToClientEvents[K]>
+) {
+  const onlineUser = onlineUsers.get(userId);
+  if (!onlineUser) return;
+  io.to(onlineUser.socketId).emit(event, ...payload);
+}
 
-  socket.on('register', (user) => {
-    const profile = getPublicUser(user.id);
+async function markPendingMessagesDelivered(userId: string) {
+  const pending = await prisma.message.findMany({
+    where: { receiverId: userId, deliveryStatus: 'sent' },
+    select: { id: true, senderId: true },
+  });
 
-    if (!profile) {
-      socket.emit('app_error', { message: 'register_failed' });
-      return;
-    }
+  if (pending.length === 0) return;
 
-    socket.data.userId = profile.id;
-    onlineUsers.set(profile.id, { ...profile, socketId: socket.id });
-    socket.broadcast.emit('user_online', profile);
+  const messageIds = pending.map((message) => message.id);
+  await prisma.message.updateMany({
+    where: { id: { in: messageIds } },
+    data: { deliveryStatus: 'delivered' },
+  });
+
+  const senderIds = new Set(pending.map((message) => message.senderId));
+  for (const senderId of senderIds) {
+    emitToUser(senderId, 'messages_status_updated', { messageIds, status: 'delivered' });
+  }
+}
+
+function getSocketToken(socket: KaplumbagaSocket): string | undefined {
+  const authToken = socket.handshake.auth?.token;
+  if (typeof authToken === 'string') return authToken;
+
+  const header = socket.handshake.headers.authorization;
+  return getBearerToken(Array.isArray(header) ? header[0] : header);
+}
+
+io.use((socket, next) => {
+  const payload = verifyAuthToken(getSocketToken(socket));
+
+  if (!payload) {
+    next(new Error('unauthorized'));
+    return;
+  }
+
+  socket.data.userId = payload.userId;
+  next();
+});
+
+io.on('connection', async (socket) => {
+  const userId = socket.data.userId;
+  if (!userId) {
+    socket.disconnect(true);
+    return;
+  }
+
+  const profile = await getPublicUser(userId);
+  if (!profile) {
+    socket.emit('app_error', { message: 'user_not_found' });
+    socket.disconnect(true);
+    return;
+  }
+
+  onlineUsers.set(profile.id, { ...profile, socketId: socket.id });
+  socket.broadcast.emit('user_online', profile);
+  socket.emit('presence_state', getOnlinePublicUsers());
+  socket.emit('chat_history', await getConversationMessages(profile.id));
+  await markPendingMessagesDelivered(profile.id);
+
+  socket.on('register', async () => {
     socket.emit('presence_state', getOnlinePublicUsers());
-    socket.emit('chat_history', getConversationMessages(profile.id));
+    socket.emit('chat_history', await getConversationMessages(profile.id));
   });
 
-  socket.on('send_message', (payload) => {
-    const sender = getPublicUser(payload.from);
-    const receiver = getPublicUser(payload.to);
-    const type = payload.type || 'text';
-    const originalText = payload.text.trim();
+  socket.on('send_message', async (payload) => {
+    try {
+      const sender = await prisma.user.findUnique({ where: { id: profile.id } });
+      const receiver = await prisma.user.findUnique({ where: { id: payload.to } });
+      const type = payload.type || 'text';
+      const rawText = payload.text.trim();
 
-    if (!sender || !receiver) {
-      socket.emit('app_error', { message: 'message_user_missing' });
-      return;
+      if (!sender || !receiver) {
+        socket.emit('app_error', { message: 'message_user_missing' });
+        return;
+      }
+
+      if (!rawText) {
+        socket.emit('app_error', { message: 'empty_message' });
+        return;
+      }
+
+      if (type === 'image' && (!rawText.startsWith('data:image/') || rawText.length > 4_500_000)) {
+        socket.emit('app_error', { message: 'invalid_image' });
+        return;
+      }
+
+      const deliveryStatus: DeliveryStatus = onlineUsers.has(receiver.id) ? 'delivered' : 'sent';
+      const translation =
+        type === 'image'
+          ? {
+              originalText: rawText,
+              translatedText: rawText,
+              sourceLang: sender.language as Language,
+              targetLang: receiver.language as Language,
+              status: 'translated' as TranslationStatus,
+            }
+          : await translateText(rawText, sender.language as Language, receiver.language as Language);
+
+      const created = await prisma.message.create({
+        data: {
+          senderId: sender.id,
+          receiverId: receiver.id,
+          type,
+          originalText: type === 'image' ? null : translation.originalText,
+          translatedText: type === 'image' ? null : translation.translatedText,
+          sourceLang: translation.sourceLang,
+          targetLang: translation.targetLang,
+          translationStatus: translation.status,
+          imageData: type === 'image' ? rawText : null,
+          deliveryStatus,
+        },
+      });
+
+      const chatMessage = toChatMessage(created);
+      socket.emit('receive_message', chatMessage);
+      emitToUser(receiver.id, 'receive_message', chatMessage);
+    } catch (error) {
+      console.error('[socket] send_message failed', error);
+      socket.emit('app_error', { message: 'message_send_failed' });
     }
-
-    if (!originalText) {
-      socket.emit('app_error', { message: 'empty_message' });
-      return;
-    }
-
-    const translation =
-      type === 'image'
-        ? {
-            originalText,
-            translatedText: originalText,
-            sourceLang: sender.language,
-            targetLang: receiver.language,
-            status: 'translated' as TranslationStatus,
-          }
-        : translateText(originalText, sender.language, receiver.language);
-
-    const msg: ChatMessage = {
-      id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
-      text: translation.translatedText,
-      translatedText: translation.translatedText,
-      originalText: translation.originalText,
-      from: sender.id,
-      to: receiver.id,
-      timestamp: new Date().toISOString(),
-      type,
-      sourceLang: translation.sourceLang,
-      targetLang: translation.targetLang,
-      status: translation.status,
-      deliveryStatus: onlineUsers.has(receiver.id) ? 'delivered' : 'sent',
-    };
-
-    messages.push(msg);
-    if (messages.length > 200) messages.shift();
-
-    io.emit('receive_message', msg);
   });
 
-  socket.on('mark_read', (data) => {
-    const updated: string[] = [];
-    for (const msg of messages) {
-      if (data.messageIds.includes(msg.id) && msg.to === data.readBy && msg.deliveryStatus !== 'read') {
-        msg.deliveryStatus = 'read';
-        updated.push(msg.id);
-      }
-    }
-    if (updated.length > 0) {
-      const sender = messages.find((m) => updated.includes(m.id));
-      if (sender) {
-        const senderOnline = onlineUsers.get(sender.from);
-        if (senderOnline) {
-          io.to(senderOnline.socketId).emit('messages_status_updated', { messageIds: updated, status: 'read' });
-        }
-      }
+  socket.on('mark_read', async (data) => {
+    const messageIds = data.messageIds.filter(Boolean);
+    if (messageIds.length === 0) return;
+
+    const readableMessages = await prisma.message.findMany({
+      where: {
+        id: { in: messageIds },
+        receiverId: profile.id,
+      },
+      select: { id: true, senderId: true },
+    });
+
+    if (readableMessages.length === 0) return;
+
+    const readableIds = readableMessages.map((message) => message.id);
+    await prisma.message.updateMany({
+      where: { id: { in: readableIds } },
+      data: { deliveryStatus: 'read' },
+    });
+
+    socket.emit('messages_status_updated', { messageIds: readableIds, status: 'read' });
+    const senderIds = new Set(readableMessages.map((message) => message.senderId));
+    for (const senderId of senderIds) {
+      emitToUser(senderId, 'messages_status_updated', { messageIds: readableIds, status: 'read' });
     }
   });
 
   socket.on('typing', (data) => {
-    const receiver = onlineUsers.get(data.to);
-    if (receiver) {
-      io.to(receiver.socketId).emit('typing', data);
-    }
+    emitToUser(data.to, 'typing', { from: profile.id, to: data.to });
   });
 
-  socket.on('call_offer', (data) => {
-    const receiver = onlineUsers.get(data.to);
-    if (receiver) {
-      io.to(receiver.socketId).emit('incoming_call', { from: data.from, offer: data.offer });
-    }
+  socket.on('call_offer', async (data) => {
+    await prisma.callLog.create({
+      data: {
+        callerId: profile.id,
+        receiverId: data.to,
+        status: 'ringing',
+      },
+    });
+    emitToUser(data.to, 'incoming_call', { from: profile.id, offer: data.offer });
   });
 
-  socket.on('call_answer', (data) => {
-    const caller = onlineUsers.get(data.to);
-    if (caller) {
-      io.to(caller.socketId).emit('call_accepted', { answer: data.answer });
-    }
+  socket.on('call_answer', async (data) => {
+    await prisma.callLog.updateMany({
+      where: { callerId: data.to, receiverId: profile.id, status: 'ringing' },
+      data: { status: 'accepted' },
+    });
+    emitToUser(data.to, 'call_accepted', { answer: data.answer });
   });
 
   socket.on('ice_candidate', (data) => {
-    const peer = onlineUsers.get(data.to);
-    if (peer) {
-      io.to(peer.socketId).emit('ice_candidate', { candidate: data.candidate });
-    }
+    emitToUser(data.to, 'ice_candidate', { candidate: data.candidate });
   });
 
-  socket.on('end_call', (data) => {
-    const peer = onlineUsers.get(data.to);
-    if (peer) {
-      io.to(peer.socketId).emit('call_ended');
-    }
+  socket.on('end_call', async (data) => {
+    await prisma.callLog.updateMany({
+      where: {
+        OR: [
+          { callerId: profile.id, receiverId: data.to },
+          { callerId: data.to, receiverId: profile.id },
+        ],
+        endedAt: null,
+      },
+      data: { status: 'ended', endedAt: new Date() },
+    });
+    emitToUser(data.to, 'call_ended');
   });
 
   socket.on('disconnect', () => {
-    const userId = socket.data.userId;
+    const online = onlineUsers.get(profile.id);
 
-    if (userId) {
-      const user = onlineUsers.get(userId);
-
-      if (user && user.socketId === socket.id) {
-        onlineUsers.delete(userId);
-        socket.broadcast.emit('user_offline', { id: userId });
-      }
+    if (online && online.socketId === socket.id) {
+      onlineUsers.delete(profile.id);
+      socket.broadcast.emit('user_offline', { id: profile.id });
     }
-
-    console.info(`[socket] disconnected ${socket.id}`);
   });
 });
 
-const PORT = process.env.PORT || 4000;
+const PORT = Number(process.env.PORT) || 4000;
 httpServer.listen(PORT, () => {
   console.info(`KAPLUMBAĞA API running on port ${PORT}`);
 });

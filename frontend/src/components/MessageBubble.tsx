@@ -18,8 +18,10 @@ const MessageBubble: React.FC<Props> = ({ message, isMe }) => {
     minute: '2-digit',
   });
 
-  const primaryText = isMe ? message.originalText : message.translatedText;
-  const secondaryText = isMe ? message.translatedText : message.originalText;
+  const safeOriginal = message.originalText || message.translatedText || message.text || '';
+  const safeTranslated = message.translatedText || message.originalText || message.text || '';
+  const primaryText = isMe ? safeOriginal : safeTranslated;
+  const secondaryText = isMe ? safeTranslated : safeOriginal;
   const secondaryLabel = isMe ? t('translation') : t('original');
   const canShowSecondary = isMe ? showTranslation : showOriginal;
   const showSecondary =

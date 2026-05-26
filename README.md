@@ -1,35 +1,38 @@
 # KAPLUMBAĞA
 
-KAPLUMBAĞA, Türkiye'deki Yusuf ile Tayland'daki Neeja'nın özel kullanımı için hazırlanmış Türkçe ↔ Tayca otomatik çeviri destekli mesajlaşma ve görüntülü konuşma uygulamasıdır.
+KAPLUMBAĞA, Türkiye'deki Yusuf ile Tayland'daki Neeja'nın özel kullanımı için geliştirilen Türkçe ↔ Tayca çeviri destekli mesajlaşma ve görüntülü konuşma uygulamasıdır.
 
-Frontend React, Vite, TypeScript, Tailwind CSS, Zustand ve socket.io-client ile; backend Node.js, Express, TypeScript, Socket.IO, CORS, users.json ve TranslationService ile hazırlanmıştır.
+Frontend React, Vite, TypeScript, Tailwind CSS, Zustand, socket.io-client, WebRTC ve Capacitor ile çalışır. Backend Node.js, Express, TypeScript, Socket.IO, Prisma, bcrypt, JWT ve TranslationService kullanır.
 
 ## Özellikler
 
-- Yusuf ve Neeja için demo giriş sistemi
-- Socket.IO ile anlık mesajlaşma
-- Türkçe ↔ Tayca demo çeviri servisi
+- Yusuf ve Neeja için hashli şifreli gerçek giriş akışı
+- JWT tabanlı oturum sistemi
+- Prisma ile kalıcı kullanıcı, mesaj ve arama kaydı
+- Socket.IO ile token doğrulamalı anlık mesajlaşma
+- Türkçe ↔ Tayca yerel çeviri sözlüğü ve gerçek çeviri sağlayıcılarına uygun servis yapısı
+- Kullanıcı diline göre Türkçe/Tayca arayüz
 - Mesajın orijinal ve çevrilmiş halini saklama
-- Hızlı mesajlar, emoji ekleme ve resim önizleme/gönderme
-- Mobil ve masaüstü uyumlu WhatsApp benzeri özel chat arayüzü
-- Kamera/mikrofon izinli demo görüntülü görüşme ekranı
-- Ayarların localStorage'a kaydedilmesi
-- Render backend ve Netlify frontend deploy hazırlığı
-- Capacitor Android APK altyapısı
+- Mesaj durumları: gönderildi, iletildi, okundu
+- Hızlı mesajlar, emoji ekleme, resim seçme/önizleme/gönderme
+- Mobil ve masaüstü uyumlu özel sohbet arayüzü
+- WebRTC görüntülü görüşme, kamera/mikrofon kontrolü ve PiP video ekranı
+- Render backend, Netlify frontend ve Android APK üretim akışı
 
-## Kullanıcı Giriş Bilgileri
+## İlk Kullanıcılar
 
 - Yusuf / 123456 / Türkçe
 - Neeja / 123456 / Tayca
 
-## Güvenlik Notu
+Bu iki kullanıcı Prisma seed sırasında oluşturulur. Şifreler veritabanına bcrypt hash olarak kaydedilir.
 
-- Demo kullanıcı şifreleri gerçek üretim için güvenli değildir.
-- Gerçek kullanımda şifreler hashlenmeli.
-- JWT veya session güvenliği eklenmeli.
-- Resim yükleme için güvenli storage kullanılmalı.
-- Gerçek çeviri API anahtarları `.env` içinde tutulmalı ve GitHub'a gönderilmemeli.
-- Mesajlar kalıcı olacaksa güvenli bir veritabanı ve erişim kuralları eklenmeli.
+## Güvenlik
+
+- Üretim ortamında `JWT_SECRET` güçlü, rastgele ve gizli tutulmalıdır.
+- Şifreler bcrypt ile hashlenir; düz metin kullanıcı dosyası kullanılmaz.
+- Gerçek çeviri API anahtarları yalnızca `.env` veya platform environment variables içinde tutulmalıdır.
+- Base64 resim akışı küçük resimler için uygundur; yüksek hacimli kullanımda Cloudinary, S3 veya Firebase Storage kullanılmalıdır.
+- WebRTC için HTTPS zorunludur. TURN sunucusu yoksa bazı uzak ağlarda görüntülü konuşma bağlantısı kurulamayabilir.
 
 ## Backend Kurulum
 
@@ -38,16 +41,18 @@ cd backend
 npm install
 ```
 
-Backend ortam dosyası:
-
-```bash
-cp .env.example .env
-```
-
-Windows PowerShell:
+Ortam dosyası:
 
 ```powershell
 Copy-Item .env.example .env
+```
+
+Veritabanı ve ilk kullanıcılar:
+
+```powershell
+npx prisma generate
+npx prisma migrate dev --name init
+npx prisma db seed
 ```
 
 ## Frontend Kurulum
@@ -57,13 +62,7 @@ cd frontend
 npm install
 ```
 
-Frontend ortam dosyası:
-
-```bash
-cp .env.example .env
-```
-
-Windows PowerShell:
+Ortam dosyası:
 
 ```powershell
 Copy-Item .env.example .env
@@ -97,7 +96,7 @@ API sağlık kontrolü:
 http://localhost:4000/health
 ```
 
-## Build ve Typecheck
+## Build ve Kontrol
 
 Backend:
 
@@ -117,7 +116,14 @@ npm run build
 npm run preview
 ```
 
-## GitHub'a Gönderme
+Android sync:
+
+```bash
+cd frontend
+npx cap sync android
+```
+
+## GitHub
 
 ```bash
 git init
@@ -128,23 +134,30 @@ git remote add origin GITHUB_REPO_URL
 git push -u origin main
 ```
 
-## Render Deploy
+## Render Backend
 
-Backend için Render ayarları:
+Render ayarları:
 
 - Root Directory: `backend`
-- Build Command: `npm install && npm run build`
+- Build Command: `npm install && npm run build:render`
 - Start Command: `npm run start`
 - Environment Variables:
   - `PORT=4000`
-  - `CLIENT_URL=https://NETLIFY-SITE-ADRESI.netlify.app`
   - `NODE_ENV=production`
+  - `CLIENT_URL=https://kaplumbaga-chat.netlify.app`
+  - `DATABASE_URL=Render PostgreSQL connection string`
+  - `JWT_SECRET=güçlü-rastgele-değer`
+  - `TRANSLATION_PROVIDER=local`
+  - `OPENAI_API_KEY=` veya `GOOGLE_TRANSLATE_API_KEY=` gerektiğinde
+  - `OPENAI_TRANSLATION_MODEL=gpt-4o-mini`
+  - `SEED_YUSUF_PASSWORD=123456`
+  - `SEED_NEEJA_PASSWORD=123456`
 
-Repo kökünde `render.yaml` dosyası hazırdır.
+`build:render` komutu PostgreSQL şeması için Prisma Client üretir, veritabanı şemasını Render PostgreSQL ile eşitler ve ilk kullanıcıları seed eder.
 
-## Netlify Deploy
+## Netlify Frontend
 
-Frontend için Netlify ayarları:
+Netlify ayarları:
 
 - Base Directory: `frontend`
 - Build Command: `npm install && npm run build`
@@ -152,25 +165,25 @@ Frontend için Netlify ayarları:
 - Environment Variables:
   - `VITE_API_URL=https://RENDER-BACKEND-ADRESI.onrender.com`
   - `VITE_SOCKET_URL=https://RENDER-BACKEND-ADRESI.onrender.com`
+  - `VITE_TURN_URL=`
+  - `VITE_TURN_USERNAME=`
+  - `VITE_TURN_CREDENTIAL=`
 
-SPA yönlendirme için `frontend/netlify.toml` ve `frontend/public/_redirects` hazırdır.
+SPA yönlendirme `frontend/netlify.toml` ve `frontend/public/_redirects` ile tanımlıdır.
 
-## APK İçin Sonraki Yol
+## APK
 
-APK için Capacitor altyapısı hazırdır.
+Debug APK üretmek için:
 
 ```bash
 cd frontend
-npm install
 npm run android:build
 ```
 
-Debug APK çıktısı:
+APK çıktısı:
 
 ```text
 frontend/android/app/build/outputs/apk/debug/app-debug.apk
 ```
 
-Üretim APK almadan önce `VITE_API_URL` ve `VITE_SOCKET_URL` gerçek Render backend adresini göstermelidir.
-
-Detaylar için `APK_GUIDE.md` dosyasına bakın.
+APK almadan önce `VITE_API_URL` ve `VITE_SOCKET_URL` canlı Render backend adresini göstermelidir.

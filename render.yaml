@@ -3,12 +3,26 @@ services:
     name: kaplumbaga-api
     env: node
     rootDir: backend
-    buildCommand: npm install && npm run build
+    buildCommand: npm install && npm run build:render
     startCommand: npm run start
     envVars:
       - key: PORT
         value: 4000
-      - key: CLIENT_URL
-        sync: false
       - key: NODE_ENV
         value: production
+      - key: CLIENT_URL
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: TRANSLATION_PROVIDER
+        value: local
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: GOOGLE_TRANSLATE_API_KEY
+        sync: false
+      - key: SEED_YUSUF_PASSWORD
+        sync: false
+      - key: SEED_NEEJA_PASSWORD
+        sync: false

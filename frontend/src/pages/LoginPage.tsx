@@ -12,7 +12,7 @@ const otherUserMap: Record<string, AppUser> = {
   'user-neeja': { id: 'user-yusuf', username: 'Yusuf', displayName: 'Yusuf', language: 'tr', avatar: 'Y' },
 };
 
-const demoAccounts: Array<{ username: string; language: Language; labelKey: string }> = [
+const initialAccounts: Array<{ username: string; language: Language; labelKey: string }> = [
   { username: 'Yusuf', language: 'tr', labelKey: 'loginAsYusuf' },
   { username: 'Neeja', language: 'th', labelKey: 'loginAsNeeja' },
 ];
@@ -37,8 +37,7 @@ const LoginPage: React.FC = () => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
-  const setUser = useAuthStore((state) => state.setUser);
-  const setOtherUser = useAuthStore((state) => state.setOtherUser);
+  const setSession = useAuthStore((state) => state.setSession);
   const activeLanguage = getLoginLanguage(username);
   const t = useMemo(() => getT(activeLanguage), [activeLanguage]);
 
@@ -58,13 +57,12 @@ const LoginPage: React.FC = () => {
         body: JSON.stringify({ username, password }),
       });
 
-      if (!data.success || !data.user) {
+      if (!data.success || !data.user || !data.token) {
         setError(t('invalidCredentials'));
         return;
       }
 
-      setUser(data.user);
-      setOtherUser(otherUserMap[data.user.id] || null);
+      setSession(data.user, otherUserMap[data.user.id] || null, data.token);
       navigate('/chat');
     } catch (err) {
       setError(getErrorMessage(err, t));
@@ -73,7 +71,7 @@ const LoginPage: React.FC = () => {
     }
   };
 
-  const fillDemoAccount = (accountName: string) => {
+  const fillInitialAccount = (accountName: string) => {
     setUsername(accountName);
     setPassword('123456');
     setError('');
@@ -89,12 +87,12 @@ const LoginPage: React.FC = () => {
               <h1 className="text-3xl font-bold tracking-normal sm:text-4xl">{t('appName')}</h1>
               <p className="mt-3 max-w-sm text-sm leading-6 text-cream-100">{t('appIntro')}</p>
             </div>
-            <div className="mt-10 grid grid-cols-2 gap-3 text-sm" aria-label={t('demoUsers')}>
-              {demoAccounts.map((account) => (
+            <div className="mt-10 grid grid-cols-2 gap-3 text-sm" aria-label={t('initialUsers')}>
+              {initialAccounts.map((account) => (
                 <button
                   key={account.username}
                   type="button"
-                  onClick={() => fillDemoAccount(account.username)}
+                  onClick={() => fillInitialAccount(account.username)}
                   className="rounded-lg border border-white/15 bg-white/10 px-3 py-3 text-left transition hover:bg-white/15 focus:outline-none focus:ring-2 focus:ring-cream-100"
                   aria-label={t(account.labelKey)}
                 >
@@ -163,7 +161,7 @@ const LoginPage: React.FC = () => {
               </button>
             </form>
 
-            <p className="mt-5 text-xs leading-5 text-gray-500">{t('demoPasswordNote')}</p>
+            <p className="mt-5 text-xs leading-5 text-gray-500">{t('passwordNote')}</p>
           </div>
         </section>
       </div>

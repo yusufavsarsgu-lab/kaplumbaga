@@ -11,11 +11,17 @@ import { useI18n } from '../i18n';
 import { useAuthStore } from '../store/authStore';
 import { useCallStore } from '../store/callStore';
 import { socket } from '../services/socket';
+import { getIceServers } from '../services/webrtc';
 
-const ICE_SERVERS: RTCIceServer[] = [
-  { urls: 'stun:stun.l.google.com:19302' },
-  { urls: 'stun:stun1.l.google.com:19302' },
-];
+function getMediaErrorMessage(error: unknown, t: (key: string) => string): string {
+  if (error instanceof DOMException) {
+    if (error.name === 'NotAllowedError' || error.name === 'SecurityError') return t('cameraDenied');
+    if (error.name === 'NotFoundError' || error.name === 'OverconstrainedError') return t('mediaNotFound');
+    if (error.name === 'NotReadableError') return t('mediaAccessError');
+  }
+
+  return t('mediaAccessError');
+}
 
 const VideoCallOverlay: React.FC = () => {
   const user = useAuthStore((state) => state.user);
@@ -39,7 +45,7 @@ const VideoCallOverlay: React.FC = () => {
   const [callStatus, setCallStatus] = useState<'connecting' | 'in-call' | 'error'>('connecting');
   const [errorMsg, setErrorMsg] = useState('');
 
-  const endCall = useCallback(() => {
+  const finishCall = useCallback((notifyPeer: boolean) => {
     if (endedRef.current) return;
     endedRef.current = true;
 
@@ -51,11 +57,15 @@ const VideoCallOverlay: React.FC = () => {
     localStreamRef.current = null;
     setStreamReady(false);
 
-    if (otherUser) {
+    if (notifyPeer && otherUser) {
       socket.emit('end_call', { to: otherUser.id });
     }
     endCallState();
   }, [otherUser, endCallState]);
+
+  const endCall = useCallback(() => {
+    finishCall(true);
+  }, [finishCall]);
 
   useEffect(() => {
     if (!isInCall || !user || !otherUser) return;
@@ -65,7 +75,7 @@ const VideoCallOverlay: React.FC = () => {
     const isAnswerer = Boolean(incomingCall);
 
     function createPeerConnection(localStream: MediaStream): RTCPeerConnection {
-      const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+      const pc = new RTCPeerConnection({ iceServers: getIceServers() });
       pcRef.current = pc;
 
       localStream.getTracks().forEach((track) => {
@@ -108,10 +118,10 @@ const VideoCallOverlay: React.FC = () => {
         const pc = createPeerConnection(localStream);
         const offer = await pc.createOffer();
         await pc.setLocalDescription(offer);
-        socket.emit('call_offer', { from: user!.id, to: otherUser!.id, offer });
+        socket.emit('call_offer', { to: otherUser!.id, offer });
       } catch (err) {
         if (!active) return;
-        setErrorMsg(err instanceof Error ? err.message : t('mediaAccessError'));
+        setErrorMsg(getMediaErrorMessage(err, t));
         setCallStatus('error');
       }
     }
@@ -133,7 +143,7 @@ const VideoCallOverlay: React.FC = () => {
         socket.emit('call_answer', { to: otherUser!.id, answer });
       } catch (err) {
         if (!active) return;
-        setErrorMsg(err instanceof Error ? err.message : t('mediaAccessError'));
+        setErrorMsg(getMediaErrorMessage(err, t));
         setCallStatus('error');
       }
     }
@@ -160,7 +170,7 @@ const VideoCallOverlay: React.FC = () => {
     };
 
     const onCallEnded = () => {
-      if (!endedRef.current) endCall();
+      finishCall(false);
     };
 
     socket.on('call_accepted', onCallAccepted);
@@ -190,8 +200,7 @@ const VideoCallOverlay: React.FC = () => {
         socket.emit('end_call', { to: otherUser.id });
       }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isInCall, user, otherUser]);
+  }, [finishCall, incomingCall, isInCall, otherUser, t, user]);
 
   const toggleMic = () => {
     const stream = localStreamRef.current;

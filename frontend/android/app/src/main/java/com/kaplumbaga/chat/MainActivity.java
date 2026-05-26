@@ -1,4 +1,4 @@
-package com.kaplumbaga.app;
+package com.kaplumbaga.chat;
 
 import com.getcapacitor.BridgeActivity;
 

@@ -1,3 +1,5 @@
+import { useAuthStore } from '../store/authStore';
+
 function getLocalApiUrl(): string {
   if (import.meta.env.PROD) return '';
 
@@ -10,10 +12,12 @@ const rawApiUrl = import.meta.env.VITE_API_URL || getLocalApiUrl();
 export const API_URL = rawApiUrl.replace(/\/$/, '');
 
 export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
+  const token = useAuthStore.getState().token;
   const response = await fetch(`${API_URL}${path}`, {
     ...init,
     headers: {
       'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...init?.headers,
     },
   });

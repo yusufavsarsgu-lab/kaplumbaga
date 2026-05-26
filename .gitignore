@@ -5,10 +5,15 @@ artifacts/
 frontend/android/.gradle/
 frontend/android/app/build/
 frontend/android/build/
+frontend/android/local.properties
 coverage/
 .env
 .env.local
 .env.*.local
+backend/prisma/*.db
+backend/prisma/*.db-journal
+backend/prisma/*.db-wal
+backend/prisma/*.db-shm
 .DS_Store
 .vscode/
 *.log

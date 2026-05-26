@@ -1,10 +1,23 @@
 # KAPLUMBAĞA APK Guide
 
-KAPLUMBAĞA frontend'i APK'ye çevirmek için Capacitor altyapısı projeye eklenmiştir.
+KAPLUMBAĞA frontend'i Capacitor ile Android APK üretecek şekilde yapılandırılmıştır.
 
-## Hazır Komutlar
+## Android Yapılandırması
 
-Debug APK üretmek için:
+- App ID: `com.kaplumbaga.chat`
+- App Name: `KAPLUMBAĞA`
+- Web Directory: `dist`
+- Android klasörü: `frontend/android`
+
+Android izinleri:
+
+- `android.permission.INTERNET`
+- `android.permission.CAMERA`
+- `android.permission.RECORD_AUDIO`
+- `android.permission.READ_MEDIA_IMAGES`
+- `android.permission.READ_EXTERNAL_STORAGE` (`maxSdkVersion=32`)
+
+## APK Üretimi
 
 ```bash
 cd frontend
@@ -18,38 +31,47 @@ APK çıktısı:
 frontend/android/app/build/outputs/apk/debug/app-debug.apk
 ```
 
-Android projesini Android Studio ile açmak için:
+Android Studio ile almak için:
 
 ```bash
+cd frontend
 npx cap open android
 ```
 
-Sadece web build'i Android projesine kopyalamak için:
+Android Studio içinde:
 
-```bash
-npm run android:sync
+```text
+Build > Build Bundle(s) / APK(s) > Build APK(s)
 ```
 
-## Üretim Backend Ayarı
+## Canlı Backend Ayarı
 
-APK almadan önce gerçek Render backend adresi frontend env içinde verilmelidir:
+APK üretmeden önce frontend ortam değişkenleri canlı Render backend adresini göstermelidir:
 
-```bash
+```text
 VITE_API_URL=https://RENDER-BACKEND-ADRESI.onrender.com
 VITE_SOCKET_URL=https://RENDER-BACKEND-ADRESI.onrender.com
 ```
 
-## Gerekli Mobil İzinler
+Görüntülü arama için TURN kullanılıyorsa:
 
-Android tarafında kamera ve mikrofon izinleri eklenmelidir:
+```text
+VITE_TURN_URL=turn:TURN-SERVER:3478
+VITE_TURN_USERNAME=TURN-KULLANICI
+VITE_TURN_CREDENTIAL=TURN-SIFRE
+```
 
-- `android.permission.CAMERA`
-- `android.permission.RECORD_AUDIO`
-- Gerekirse medya seçimi için Android sürümüne uygun fotoğraf izinleri
+## Sync
 
-## Üretim Notları
+Web build'i Android projesine kopyalamak için:
 
-- Mobil uygulamada `VITE_API_URL` ve `VITE_SOCKET_URL` Render backend adresini göstermelidir.
-- Gerçek WebRTC yapılacaksa TURN/STUN sunucuları eklenmelidir.
-- Resimler için güvenli storage servisi kullanılmalıdır.
-- API anahtarları mobil bundle içine gömülmemeli, backend üzerinden yönetilmelidir.
+```bash
+cd frontend
+npx cap sync android
+```
+
+## Notlar
+
+- API anahtarları mobil bundle içine yazılmamalıdır; çeviri sağlayıcıları backend üzerinden yönetilmelidir.
+- Base64 resim akışı küçük resimler için uygundur; yoğun kullanımda storage servisi kullanılmalıdır.
+- TURN sunucusu yoksa bazı ağlarda görüntülü arama bağlantısı kurulamayabilir.

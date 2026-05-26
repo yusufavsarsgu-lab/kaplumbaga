@@ -1,10 +1,10 @@
 apply plugin: 'com.android.application'
 
 android {
-    namespace "com.kaplumbaga.app"
+    namespace "com.kaplumbaga.chat"
     compileSdk rootProject.ext.compileSdkVersion
     defaultConfig {
-        applicationId "com.kaplumbaga.app"
+        applicationId "com.kaplumbaga.chat"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1

@@ -30,4 +30,5 @@ export interface LoginResponse {
   success: boolean;
   message?: string;
   user?: AppUser;
+  token?: string;
 }

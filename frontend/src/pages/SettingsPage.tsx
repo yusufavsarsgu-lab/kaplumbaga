@@ -95,7 +95,7 @@ const SettingsPage: React.FC = () => {
             <div>
               <h2 className="text-xl font-bold text-turtle-900">{t('appName')}</h2>
               <p className="mt-1 text-sm text-gray-500">
-                {t('version')} 1.0.0 MVP
+                {t('version')} 1.0.0
               </p>
             </div>
           </div>

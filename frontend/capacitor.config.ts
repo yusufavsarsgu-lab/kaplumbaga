@@ -1,5 +1,5 @@
 const config = {
-  appId: 'com.kaplumbaga.app',
+  appId: 'com.kaplumbaga.chat',
   appName: 'KAPLUMBAĞA',
   webDir: 'dist',
   server: {

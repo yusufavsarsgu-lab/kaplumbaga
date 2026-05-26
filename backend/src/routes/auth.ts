@@ -1,5 +1,9 @@
 import { Router } from 'express';
-import users from '../data/users.json';
+import bcrypt from 'bcrypt';
+import { prisma } from '../db/prisma';
+import { authMiddleware, type AuthenticatedRequest } from '../middlewares/authMiddleware';
+import { signAuthToken } from '../services/AuthService';
+import type { JwtLanguage } from '../services/AuthService';
 
 const router = Router();
 
@@ -8,18 +12,11 @@ interface LoginBody {
   password?: string;
 }
 
-interface StoredUser {
-  id: string;
-  username: string;
-  password: string;
-  displayName: string;
-  language: 'tr' | 'th';
-  avatar: string;
+function toJwtLanguage(language: string): JwtLanguage {
+  return language === 'th' ? 'th' : 'tr';
 }
 
-const demoUsers = users as StoredUser[];
-
-router.post('/login', (req, res) => {
+router.post('/login', async (req, res) => {
   const { username = '', password = '' } = req.body as LoginBody;
   const normalizedUsername = username.trim().toLocaleLowerCase('tr-TR');
 
@@ -28,15 +25,43 @@ router.post('/login', (req, res) => {
     return;
   }
 
-  // Demo MVP: passwords live in users.json only for local testing.
-  // Replace this with hashed passwords and token/session based auth before public launch.
-  const user = demoUsers.find(
-    (candidate) =>
-      candidate.username.toLocaleLowerCase('tr-TR') === normalizedUsername && candidate.password === password
-  );
+  const users = await prisma.user.findMany();
+  const user = users.find((candidate) => candidate.username.toLocaleLowerCase('tr-TR') === normalizedUsername);
 
-  if (!user) {
+  if (!user || !(await bcrypt.compare(password, user.passwordHash))) {
     res.status(401).json({ success: false, message: 'invalid_credentials' });
+    return;
+  }
+
+  const token = signAuthToken({
+    userId: user.id,
+    username: user.username,
+    language: toJwtLanguage(user.language),
+  });
+
+  res.json({
+    success: true,
+    user: {
+      id: user.id,
+      username: user.username,
+      displayName: user.displayName,
+      language: user.language,
+      avatar: user.avatarUrl || user.displayName.slice(0, 1).toUpperCase(),
+    },
+    token,
+  });
+});
+
+router.get('/me', authMiddleware, async (req: AuthenticatedRequest, res) => {
+  const authUser = req.authUser;
+  if (!authUser) {
+    res.status(401).json({ success: false, message: 'unauthorized' });
+    return;
+  }
+
+  const user = await prisma.user.findUnique({ where: { id: authUser.userId } });
+  if (!user) {
+    res.status(404).json({ success: false, message: 'user_not_found' });
     return;
   }
 
@@ -47,7 +72,7 @@ router.post('/login', (req, res) => {
       username: user.username,
       displayName: user.displayName,
       language: user.language,
-      avatar: user.avatar,
+      avatar: user.avatarUrl || user.displayName.slice(0, 1).toUpperCase(),
     },
   });
 });
