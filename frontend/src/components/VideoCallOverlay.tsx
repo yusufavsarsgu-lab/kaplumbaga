@@ -38,12 +38,19 @@ const VideoCallOverlay: React.FC = () => {
   const pcRef = useRef<RTCPeerConnection | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
   const endedRef = useRef(false);
+  const pendingCandidatesRef = useRef<RTCIceCandidateInit[]>([]);
+  const timeoutRef = useRef<number | null>(null);
 
   const [micOn, setMicOn] = useState(true);
   const [camOn, setCamOn] = useState(true);
   const [streamReady, setStreamReady] = useState(false);
   const [callStatus, setCallStatus] = useState<'connecting' | 'in-call' | 'error'>('connecting');
   const [errorMsg, setErrorMsg] = useState('');
+  const callStatusRef = useRef(callStatus);
+
+  useEffect(() => {
+    callStatusRef.current = callStatus;
+  }, [callStatus]);
 
   const finishCall = useCallback((notifyPeer: boolean) => {
     if (endedRef.current) return;
@@ -77,6 +84,16 @@ const VideoCallOverlay: React.FC = () => {
     function createPeerConnection(localStream: MediaStream): RTCPeerConnection {
       const pc = new RTCPeerConnection({ iceServers: getIceServers() });
       pcRef.current = pc;
+
+      // Önceki buffer'daki candidate'ları ekle (eğer remote description zaten set edilmişse)
+      if (pc.remoteDescription && pendingCandidatesRef.current.length > 0) {
+        while (pendingCandidatesRef.current.length > 0) {
+          const cand = pendingCandidatesRef.current.shift();
+          if (cand) {
+            try { pc.addIceCandidate(new RTCIceCandidate(cand)); } catch { /* ignored */ }
+          }
+        }
+      }
 
       localStream.getTracks().forEach((track) => {
         pc.addTrack(track, localStream);
@@ -138,6 +155,13 @@ const VideoCallOverlay: React.FC = () => {
 
         const pc = createPeerConnection(localStream);
         await pc.setRemoteDescription(new RTCSessionDescription(currentOffer));
+        // Remote description set edildikten sonra buffer'daki candidate'ları ekle
+        while (pendingCandidatesRef.current.length > 0) {
+          const cand = pendingCandidatesRef.current.shift();
+          if (cand) {
+            try { await pc.addIceCandidate(new RTCIceCandidate(cand)); } catch { /* ignored */ }
+          }
+        }
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
         socket.emit('call_answer', { to: otherUser!.id, answer });
@@ -153,6 +177,13 @@ const VideoCallOverlay: React.FC = () => {
       if (!pc) return;
       try {
         await pc.setRemoteDescription(new RTCSessionDescription(data.answer as RTCSessionDescriptionInit));
+        // Remote description set edildikten sonra buffer'daki candidate'ları ekle
+        while (pendingCandidatesRef.current.length > 0) {
+          const cand = pendingCandidatesRef.current.shift();
+          if (cand) {
+            try { await pc.addIceCandidate(new RTCIceCandidate(cand)); } catch { /* ignored */ }
+          }
+        }
       } catch {
         setErrorMsg(t('callFailed'));
         setCallStatus('error');
@@ -161,7 +192,10 @@ const VideoCallOverlay: React.FC = () => {
 
     const onIceCandidate = async (data: { candidate: unknown }) => {
       const pc = pcRef.current;
-      if (!pc) return;
+      if (!pc || !pc.remoteDescription) {
+        pendingCandidatesRef.current.push(data.candidate as RTCIceCandidateInit);
+        return;
+      }
       try {
         await pc.addIceCandidate(new RTCIceCandidate(data.candidate as RTCIceCandidateInit));
       } catch {
@@ -177,6 +211,14 @@ const VideoCallOverlay: React.FC = () => {
     socket.on('ice_candidate', onIceCandidate);
     socket.on('call_ended', onCallEnded);
 
+    // 15 saniye içinde bağlanamazsa timeout
+    timeoutRef.current = window.setTimeout(() => {
+      if (callStatusRef.current === 'connecting' && !endedRef.current) {
+        setErrorMsg(t('callFailed'));
+        setCallStatus('error');
+      }
+    }, 15000);
+
     if (isAnswerer) {
       startAsAnswerer();
     } else {
@@ -185,6 +227,10 @@ const VideoCallOverlay: React.FC = () => {
 
     return () => {
       active = false;
+      if (timeoutRef.current) {
+        window.clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
+      }
       socket.off('call_accepted', onCallAccepted);
       socket.off('ice_candidate', onIceCandidate);
       socket.off('call_ended', onCallEnded);
