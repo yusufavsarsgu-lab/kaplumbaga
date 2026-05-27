@@ -19,30 +19,7 @@ interface DictionaryEntry {
   aliases?: string[];
 }
 
-const dictionary: DictionaryEntry[] = [
-  { tr: 'Seni seviyorum', th: 'ฉันรักคุณ', aliases: ['love you', 'ฉันรักเธอ'] },
-  { tr: 'Seni özledim', th: 'ฉันคิดถึงคุณ', aliases: ['miss you', 'ฉันคิดถึงเธอ'] },
-  { tr: 'Nasılsın?', th: 'คุณเป็นอย่างไรบ้าง?', aliases: ['สบายดีไหม?'] },
-  { tr: 'Görüntülü konuşalım mı?', th: 'เราวิดีโอคอลกันไหม?', aliases: ['วิดีโอคอลกันไหม?'] },
-  { tr: 'Birazdan yazacağım', th: 'เดี๋ยวฉันจะพิมพ์หา' },
-  { tr: 'Tatlı kaplumbağam', th: 'เต่าน้อยที่รักของฉัน' },
-  { tr: 'Günaydın', th: 'อรุณสวัสดิ์' },
-  { tr: 'Günaydın aşkım', th: 'อรุณสวัสดิ์ที่รัก' },
-  { tr: 'İyi geceler', th: 'ราตรีสวัสดิ์' },
-  { tr: 'İyi geceler aşkım', th: 'ราตรีสวัสดิ์ที่รัก' },
-  { tr: 'Yemek yedin mi?', th: 'กินข้าวหรือยัง?' },
-  { tr: 'Ben seni çok seviyorum', th: 'ฉันรักคุณมากๆ' },
-  { tr: 'Ne yapıyorsun?', th: 'ทำอะไรอยู่?' },
-  { tr: 'Beni özledin mi?', th: 'คิดถึงฉันไหม?' },
-  { tr: 'Bugün nasılsın aşkım?', th: 'วันนี้เป็นอย่างไรบ้างที่รัก?' },
-  { tr: 'Seni görmek istiyorum', th: 'ฉันอยากเจอคุณ', aliases: ['ฉันอยากเจอเธอ'] },
-  { tr: 'Biraz konuşalım mı?', th: 'คุยกันสักหน่อยไหม?' },
-  { tr: 'Kalbim seninle', th: 'หัวใจฉันอยู่กับคุณ' },
-  { tr: 'Merhaba', th: 'สวัสดี', aliases: ['Selam'] },
-  { tr: 'Teşekkür ederim', th: 'ขอบคุณมาก', aliases: ['Teşekkürler'] },
-  { tr: 'Tamam', th: 'ตกลง', aliases: ['Peki'] },
-  { tr: 'Görüşürüz', th: 'แล้วเจอกัน' },
-];
+const dictionary: DictionaryEntry[] = [];
 
 // Emoji + Variation Selector + ZWJ + Symbol/Pictograph kaldırıcı.
 // Modern V8/Node 20+ Unicode property escapes destekler.
@@ -242,12 +219,86 @@ function decodeHtmlEntities(value: string): string {
     .replace(/&gt;/g, '>');
 }
 
+class MyMemoryTranslationService implements Translator {
+  async translate(text: string, sourceLang: Lang, targetLang: Lang): Promise<TranslationOutcome> {
+    const trimmed = text.trim();
+    if (!trimmed || sourceLang === targetLang) {
+      return {
+        originalText: text,
+        translatedText: text,
+        sourceLang,
+        targetLang,
+        status: sourceLang === targetLang ? 'translated' : 'fallback',
+      };
+    }
+
+    try {
+      const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(trimmed)}&langpair=${sourceLang}|${targetLang}`;
+      const response = await fetch(url, { signal: AbortSignal.timeout(8000) });
+      const data = (await response.json()) as {
+        responseData?: { translatedText?: string };
+        responseStatus?: number;
+      };
+
+      if (data.responseStatus === 200 && data.responseData?.translatedText) {
+        const translated = data.responseData.translatedText.trim();
+        if (translated && translated.toLowerCase() !== trimmed.toLowerCase()) {
+          return {
+            originalText: text,
+            translatedText: translated,
+            sourceLang,
+            targetLang,
+            status: 'translated',
+          };
+        }
+      }
+    } catch {
+      // MyMemory hatası, fallback döneceğiz
+    }
+
+    return {
+      originalText: text,
+      translatedText: text,
+      sourceLang,
+      targetLang,
+      status: 'fallback',
+    };
+  }
+}
+
+class HybridTranslationService implements Translator {
+  private readonly local = new LocalTranslationService(dictionary);
+  private readonly mymemory = new MyMemoryTranslationService();
+
+  async translate(text: string, sourceLang: Lang, targetLang: Lang): Promise<TranslationOutcome> {
+    const trimmed = text.trim();
+    if (!trimmed || sourceLang === targetLang) {
+      return {
+        originalText: text,
+        translatedText: text,
+        sourceLang,
+        targetLang,
+        status: sourceLang === targetLang ? 'translated' : 'fallback',
+      };
+    }
+
+    // 1. Önce yerel sözlük dene (hızlı, offline)
+    const localResult = await this.local.translate(text, sourceLang, targetLang);
+    if (localResult.status === 'translated') {
+      return localResult;
+    }
+
+    // 2. Sözlükte yoksa ücretsiz MyMemory API dene
+    return this.mymemory.translate(text, sourceLang, targetLang);
+  }
+}
+
 function createTranslationService(): Translator {
   const provider = process.env.TRANSLATION_PROVIDER?.trim().toLowerCase();
 
   if (provider === 'openai') return new OpenAiTranslationService();
   if (provider === 'google') return new GoogleTranslationService();
-  return new LocalTranslationService(dictionary);
+  return new HybridTranslationService();
 }
 
 export const translationService: Translator = createTranslationService();
