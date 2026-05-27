@@ -82,9 +82,15 @@ type KaplumbagaSocket = Socket<ClientToServerEvents, ServerToClientEvents, Inter
 const localHostName = 'local' + 'host';
 const loopbackHostName = ['127', '0', '0', '1'].join('.');
 const defaultClientUrls = [`http://${localHostName}:5173`, `http://${loopbackHostName}:5173`];
-const allowedOrigins = (process.env.CLIENT_URL ? process.env.CLIENT_URL.split(',') : defaultClientUrls)
+let allowedOrigins = (process.env.CLIENT_URL ? process.env.CLIENT_URL.split(',') : defaultClientUrls)
   .map((origin) => origin.trim())
   .filter(Boolean);
+
+// Mobil APK (Capacitor WebView) origin desteği
+const mobileOrigins = ['https://localhost', 'http://localhost', 'capacitor://localhost', 'ionic://localhost'];
+for (const mo of mobileOrigins) {
+  if (!allowedOrigins.includes(mo)) allowedOrigins.push(mo);
+}
 
 if (process.env.NODE_ENV === 'production' && !process.env.JWT_SECRET?.trim()) {
   throw new Error('JWT_SECRET is required in production.');
