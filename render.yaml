@@ -34,6 +34,8 @@ services:
         value: gpt-4o-mini
       - key: GOOGLE_TRANSLATE_API_KEY
         sync: false
+      - key: DEEPL_API_KEY
+        sync: false
       - key: SEED_YUSUF_PASSWORD
         value: "123456"
       - key: SEED_NEEJA_PASSWORD

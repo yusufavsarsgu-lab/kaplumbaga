@@ -263,9 +263,54 @@ class MyMemoryTranslationService implements Translator {
   }
 }
 
+class DeepLTranslationService implements Translator {
+  private readonly fallback = new LocalTranslationService(dictionary);
+
+  async translate(text: string, sourceLang: Lang, targetLang: Lang): Promise<TranslationOutcome> {
+    const apiKey = process.env.DEEPL_API_KEY?.trim();
+    if (!apiKey || sourceLang === targetLang) {
+      return this.fallback.translate(text, sourceLang, targetLang);
+    }
+
+    try {
+      const response = await fetch('https://api-free.deepl.com/v2/translate', {
+        method: 'POST',
+        headers: {
+          Authorization: `DeepL-Auth-Key ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          text: [text.trim()],
+          source_lang: sourceLang.toUpperCase(),
+          target_lang: targetLang.toUpperCase(),
+        }),
+      });
+
+      if (!response.ok) return this.fallback.translate(text, sourceLang, targetLang);
+
+      const data = (await response.json()) as {
+        translations?: Array<{ text?: string }>;
+      };
+      const translatedText = data.translations?.[0]?.text?.trim();
+
+      if (!translatedText) return this.fallback.translate(text, sourceLang, targetLang);
+
+      return {
+        originalText: text,
+        translatedText,
+        sourceLang,
+        targetLang,
+        status: 'translated',
+      };
+    } catch {
+      return this.fallback.translate(text, sourceLang, targetLang);
+    }
+  }
+}
+
 class HybridTranslationService implements Translator {
   private readonly local = new LocalTranslationService(dictionary);
-  private readonly mymemory = new MyMemoryTranslationService();
+  private readonly deepl = new DeepLTranslationService();
 
   async translate(text: string, sourceLang: Lang, targetLang: Lang): Promise<TranslationOutcome> {
     const trimmed = text.trim();
@@ -285,8 +330,8 @@ class HybridTranslationService implements Translator {
       return localResult;
     }
 
-    // 2. Sözlükte yoksa ücretsiz MyMemory API dene
-    return this.mymemory.translate(text, sourceLang, targetLang);
+    // 2. Sözlükte yoksa DeepL Free API dene (key varsa)
+    return this.deepl.translate(text, sourceLang, targetLang);
   }
 }
 
@@ -295,6 +340,7 @@ function createTranslationService(): Translator {
 
   if (provider === 'openai') return new OpenAiTranslationService();
   if (provider === 'google') return new GoogleTranslationService();
+  if (provider === 'deepl') return new DeepLTranslationService();
   return new HybridTranslationService();
 }
 
