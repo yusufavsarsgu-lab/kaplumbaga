@@ -26,7 +26,7 @@ function getMediaErrorMessage(error: unknown, t: (key: string) => string): strin
 const VideoCallOverlay: React.FC = () => {
   const user = useAuthStore((state) => state.user);
   const otherUser = useAuthStore((state) => state.otherUser);
-  const incomingCall = useCallStore((state) => state.incomingCall);
+  const currentOffer = useCallStore((state) => state.currentOffer);
   const isInCall = useCallStore((state) => state.isInCall);
   const callMode = useCallStore((state) => state.callMode);
   const endCallState = useCallStore((state) => state.endCallState);
@@ -72,7 +72,7 @@ const VideoCallOverlay: React.FC = () => {
 
     endedRef.current = false;
     let active = true;
-    const isAnswerer = Boolean(incomingCall);
+    const isAnswerer = Boolean(currentOffer);
 
     function createPeerConnection(localStream: MediaStream): RTCPeerConnection {
       const pc = new RTCPeerConnection({ iceServers: getIceServers() });
@@ -127,7 +127,7 @@ const VideoCallOverlay: React.FC = () => {
     }
 
     async function startAsAnswerer() {
-      if (!incomingCall) return;
+      if (!currentOffer) return;
       try {
         const localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
         if (!active) { localStream.getTracks().forEach((tr) => tr.stop()); return; }
@@ -137,7 +137,7 @@ const VideoCallOverlay: React.FC = () => {
         if (localVideoRef.current) localVideoRef.current.srcObject = localStream;
 
         const pc = createPeerConnection(localStream);
-        await pc.setRemoteDescription(new RTCSessionDescription(incomingCall.offer));
+        await pc.setRemoteDescription(new RTCSessionDescription(currentOffer));
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
         socket.emit('call_answer', { to: otherUser!.id, answer });
@@ -200,7 +200,7 @@ const VideoCallOverlay: React.FC = () => {
         socket.emit('end_call', { to: otherUser.id });
       }
     };
-  }, [finishCall, incomingCall, isInCall, otherUser, t, user]);
+  }, [finishCall, currentOffer, isInCall, otherUser, t, user]);
 
   const toggleMic = () => {
     const stream = localStreamRef.current;

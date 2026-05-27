@@ -9,6 +9,7 @@ export interface IncomingCall {
 
 interface CallState {
   incomingCall: IncomingCall | null;
+  currentOffer: RTCSessionDescriptionInit | null;
   isInCall: boolean;
   callMode: CallMode;
   setIncomingCall: (call: IncomingCall | null) => void;
@@ -21,12 +22,18 @@ interface CallState {
 
 export const useCallStore = create<CallState>()((set) => ({
   incomingCall: null,
+  currentOffer: null,
   isInCall: false,
   callMode: 'full',
   setIncomingCall: (call) => set({ incomingCall: call }),
-  startCall: () => set({ isInCall: true, callMode: 'full', incomingCall: null }),
-  endCallState: () => set({ isInCall: false, callMode: 'full', incomingCall: null }),
+  startCall: () => set((state) => ({
+    isInCall: true,
+    callMode: 'full',
+    currentOffer: state.incomingCall?.offer || null,
+    incomingCall: null,
+  })),
+  endCallState: () => set({ isInCall: false, callMode: 'full', incomingCall: null, currentOffer: null }),
   setCallMode: (mode) => set({ callMode: mode }),
   toggleMode: () => set((s) => ({ callMode: s.callMode === 'full' ? 'mini' : 'full' })),
-  clear: () => set({ incomingCall: null, isInCall: false, callMode: 'full' }),
+  clear: () => set({ incomingCall: null, currentOffer: null, isInCall: false, callMode: 'full' }),
 }));
