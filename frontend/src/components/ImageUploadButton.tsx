@@ -7,13 +7,54 @@ interface Props {
   onError?: (message: string) => void;
 }
 
-const MAX_IMAGE_SIZE = 3 * 1024 * 1024;
+const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
+const MAX_WIDTH = 1024;
+const MAX_HEIGHT = 1024;
+const JPEG_QUALITY = 0.75;
+
+function compressImage(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+
+      let { width, height } = img;
+      if (width > MAX_WIDTH || height > MAX_HEIGHT) {
+        const ratio = Math.min(MAX_WIDTH / width, MAX_HEIGHT / height);
+        width = Math.round(width * ratio);
+        height = Math.round(height * ratio);
+      }
+
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        reject(new Error('Canvas context failed'));
+        return;
+      }
+      ctx.drawImage(img, 0, 0, width, height);
+
+      const dataUrl = canvas.toDataURL('image/jpeg', JPEG_QUALITY);
+      resolve(dataUrl);
+    };
+
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error('Image load failed'));
+    };
+
+    img.src = url;
+  });
+}
 
 const ImageUploadButton: React.FC<Props> = ({ onImageSelect, onError }) => {
   const fileRef = useRef<HTMLInputElement>(null);
   const { t } = useI18n();
 
-  const handleFile = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
@@ -29,14 +70,12 @@ const ImageUploadButton: React.FC<Props> = ({ onImageSelect, onError }) => {
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === 'string') {
-        onImageSelect(reader.result);
-      }
-    };
-    reader.onerror = () => onError?.(t('imageReadError'));
-    reader.readAsDataURL(file);
+    try {
+      const compressed = await compressImage(file);
+      onImageSelect(compressed);
+    } catch {
+      onError?.(t('imageReadError'));
+    }
 
     if (fileRef.current) fileRef.current.value = '';
   };

@@ -115,11 +115,11 @@ const io = new Server<ClientToServerEvents, ServerToClientEvents, InterServerEve
     methods: ['GET', 'POST'],
     credentials: true,
   },
-  maxHttpBufferSize: 4_500_000,
+  maxHttpBufferSize: 10_000_000,
 });
 
 app.use(cors(corsOptions));
-app.use(express.json({ limit: '4mb' }));
+app.use(express.json({ limit: '10mb' }));
 
 app.get('/health', async (_req, res) => {
   try {
