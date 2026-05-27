@@ -7,9 +7,10 @@ import type { ChatMessage } from '../types';
 interface Props {
   message: ChatMessage;
   isMe: boolean;
+  onImageClick?: (src: string) => void;
 }
 
-const MessageBubble: React.FC<Props> = ({ message, isMe }) => {
+const MessageBubble: React.FC<Props> = ({ message, isMe, onImageClick }) => {
   const showOriginal = useSettingsStore((state) => state.showOriginal);
   const showTranslation = useSettingsStore((state) => state.showTranslation);
   const { language, t } = useI18n();
@@ -37,8 +38,9 @@ const MessageBubble: React.FC<Props> = ({ message, isMe }) => {
           <img
             src={message.originalText}
             alt={t('imageAltSent')}
-            className="max-h-72 w-full rounded-lg object-cover"
+            className="max-h-72 w-full cursor-pointer rounded-lg object-cover"
             loading="lazy"
+            onClick={() => onImageClick?.(message.originalText)}
           />
         ) : (
           <p className="whitespace-pre-wrap text-[15px] leading-relaxed">{primaryText}</p>
@@ -51,8 +53,19 @@ const MessageBubble: React.FC<Props> = ({ message, isMe }) => {
           </p>
         )}
 
+        {message.status === 'fallback' && message.type !== 'image' && (
+          <span className={`mt-1 block text-[10px] ${isMe ? 'text-green-50/70' : 'text-gray-400'}`}>
+            {t('translationNotFound')}
+          </span>
+        )}
+
         <span className={`mt-1 flex items-center justify-end gap-1 text-[10px] ${isMe ? 'text-green-50' : 'text-gray-400'}`}>
           {time}
+          {message.provider && message.provider !== 'fallback' && (
+            <span className="rounded bg-black/10 px-1 py-px text-[9px] uppercase">
+              {message.provider}
+            </span>
+          )}
           {isMe && (
             message.deliveryStatus === 'read'
               ? <CheckCheck className="h-3.5 w-3.5 text-blue-300" />

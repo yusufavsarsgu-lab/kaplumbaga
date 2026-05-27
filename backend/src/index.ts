@@ -6,7 +6,7 @@ import cors from 'cors';
 import authRoutes from './routes/auth';
 import { prisma } from './db/prisma';
 import { getBearerToken, verifyAuthToken } from './services/AuthService';
-import { translateText } from './services/TranslationService';
+import { translateText, type TranslationProvider } from './services/TranslationService';
 
 const app = express();
 const httpServer = createServer(app);
@@ -40,6 +40,7 @@ interface ChatMessage {
   sourceLang: Language;
   targetLang: Language;
   status: TranslationStatus;
+  provider: TranslationProvider;
   deliveryStatus: DeliveryStatus;
 }
 
@@ -177,6 +178,7 @@ function toChatMessage(message: {
   sourceLang: string;
   targetLang: string;
   translationStatus: string;
+  translationProvider?: string | null;
   imageData: string | null;
   imageUrl: string | null;
   deliveryStatus: string;
@@ -185,6 +187,7 @@ function toChatMessage(message: {
   const type = toMessageType(message.type);
   const originalText = type === 'image' ? message.imageData || message.imageUrl || '' : message.originalText || '';
   const translatedText = type === 'image' ? originalText : message.translatedText || originalText;
+  const provider = (message.translationProvider || 'fallback') as TranslationProvider;
 
   return {
     id: message.id,
@@ -198,6 +201,7 @@ function toChatMessage(message: {
     sourceLang: toLanguage(message.sourceLang),
     targetLang: toLanguage(message.targetLang),
     status: toTranslationStatus(message.translationStatus),
+    provider,
     deliveryStatus: toDeliveryStatus(message.deliveryStatus),
   };
 }
@@ -329,6 +333,7 @@ io.on('connection', async (socket) => {
               sourceLang: sender.language as Language,
               targetLang: receiver.language as Language,
               status: 'translated' as TranslationStatus,
+              provider: 'local' as TranslationProvider,
             }
           : await translateText(rawText, sender.language as Language, receiver.language as Language);
 
@@ -348,6 +353,7 @@ io.on('connection', async (socket) => {
       });
 
       const chatMessage = toChatMessage(created);
+      chatMessage.provider = (type === 'image' ? 'local' : translation.provider) as TranslationProvider;
       socket.emit('receive_message', chatMessage);
       emitToUser(receiver.id, 'receive_message', chatMessage);
     } catch (error) {

@@ -34,7 +34,11 @@ services:
         value: gpt-4o-mini
       - key: GOOGLE_TRANSLATE_API_KEY
         sync: false
-      - key: DEEPL_API_KEY
+      - key: MYMEMORY_EMAIL
+        sync: false
+      - key: LIBRETRANSLATE_URL
+        value: "https://libretranslate.com"
+      - key: LIBRETRANSLATE_API_KEY
         sync: false
       - key: SEED_YUSUF_PASSWORD
         value: "123456"

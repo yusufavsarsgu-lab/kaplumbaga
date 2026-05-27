@@ -2,6 +2,7 @@ import { dictionary, type DictionaryEntry } from './dictionary';
 
 export type Lang = 'tr' | 'th';
 export type TranslationStatus = 'translated' | 'fallback';
+export type TranslationProvider = 'local' | 'mymemory' | 'libretranslate' | 'fallback';
 
 export interface TranslationOutcome {
   originalText: string;
@@ -9,6 +10,7 @@ export interface TranslationOutcome {
   sourceLang: Lang;
   targetLang: Lang;
   status: TranslationStatus;
+  provider: TranslationProvider;
 }
 
 export interface Translator {
@@ -65,6 +67,7 @@ class LocalTranslationService implements Translator {
         sourceLang,
         targetLang,
         status: sourceLang === targetLang ? 'translated' : 'fallback',
+        provider: sourceLang === targetLang ? 'local' : 'fallback',
       };
     }
 
@@ -90,6 +93,7 @@ class LocalTranslationService implements Translator {
         sourceLang,
         targetLang,
         status: 'fallback',
+        provider: 'fallback',
       };
     }
 
@@ -99,118 +103,9 @@ class LocalTranslationService implements Translator {
       sourceLang,
       targetLang,
       status: 'translated',
+      provider: 'local',
     };
   }
-}
-
-class OpenAiTranslationService implements Translator {
-  private readonly fallback = new LocalTranslationService(dictionary);
-
-  async translate(text: string, sourceLang: Lang, targetLang: Lang): Promise<TranslationOutcome> {
-    const apiKey = process.env.OPENAI_API_KEY?.trim();
-    if (!apiKey || sourceLang === targetLang) {
-      return this.fallback.translate(text, sourceLang, targetLang);
-    }
-
-    try {
-      const response = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: process.env.OPENAI_TRANSLATION_MODEL || 'gpt-4o-mini',
-          temperature: 0,
-          messages: [
-            {
-              role: 'system',
-              content:
-                'Translate the user message only. Return only the translated text, without explanations or quotes.',
-            },
-            {
-              role: 'user',
-              content: `Translate from ${sourceLang} to ${targetLang}: ${text}`,
-            },
-          ],
-        }),
-      });
-
-      if (!response.ok) return this.fallback.translate(text, sourceLang, targetLang);
-
-      const data = (await response.json()) as {
-        choices?: Array<{ message?: { content?: string } }>;
-      };
-      const translatedText = data.choices?.[0]?.message?.content?.trim();
-
-      if (!translatedText) return this.fallback.translate(text, sourceLang, targetLang);
-
-      return {
-        originalText: text,
-        translatedText,
-        sourceLang,
-        targetLang,
-        status: 'translated',
-      };
-    } catch {
-      return this.fallback.translate(text, sourceLang, targetLang);
-    }
-  }
-}
-
-class GoogleTranslationService implements Translator {
-  private readonly fallback = new LocalTranslationService(dictionary);
-
-  async translate(text: string, sourceLang: Lang, targetLang: Lang): Promise<TranslationOutcome> {
-    const apiKey = process.env.GOOGLE_TRANSLATE_API_KEY?.trim();
-    if (!apiKey || sourceLang === targetLang) {
-      return this.fallback.translate(text, sourceLang, targetLang);
-    }
-
-    try {
-      const url = new URL('https://translation.googleapis.com/language/translate/v2');
-      url.searchParams.set('key', apiKey);
-
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          q: text,
-          source: sourceLang,
-          target: targetLang,
-          format: 'text',
-        }),
-      });
-
-      if (!response.ok) return this.fallback.translate(text, sourceLang, targetLang);
-
-      const data = (await response.json()) as {
-        data?: { translations?: Array<{ translatedText?: string }> };
-      };
-      const translatedText = decodeHtmlEntities(data.data?.translations?.[0]?.translatedText?.trim() || '');
-
-      if (!translatedText) return this.fallback.translate(text, sourceLang, targetLang);
-
-      return {
-        originalText: text,
-        translatedText,
-        sourceLang,
-        targetLang,
-        status: 'translated',
-      };
-    } catch {
-      return this.fallback.translate(text, sourceLang, targetLang);
-    }
-  }
-}
-
-function decodeHtmlEntities(value: string): string {
-  return value
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>');
 }
 
 class MyMemoryTranslationService implements Translator {
@@ -223,11 +118,17 @@ class MyMemoryTranslationService implements Translator {
         sourceLang,
         targetLang,
         status: sourceLang === targetLang ? 'translated' : 'fallback',
+        provider: sourceLang === targetLang ? 'local' : 'fallback',
       };
     }
 
     try {
-      const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(trimmed)}&langpair=${sourceLang}|${targetLang}`;
+      let url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(trimmed)}&langpair=${sourceLang}|${targetLang}`;
+      const email = process.env.MYMEMORY_EMAIL?.trim();
+      if (email) {
+        url += `&de=${encodeURIComponent(email)}`;
+      }
+
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 8000);
       const response = await fetch(url, { signal: controller.signal });
@@ -247,64 +148,97 @@ class MyMemoryTranslationService implements Translator {
             sourceLang,
             targetLang,
             status: 'translated',
+            provider: 'mymemory',
           };
         }
       }
-      throw new Error('MyMemory returned empty or same translation');
-    } catch (err) {
-      throw new Error(`MyMemory API failed: ${(err as Error).message}`);
+    } catch {
+      // MyMemory hatası, sonraki provider denenecek
     }
+
+    return {
+      originalText: text,
+      translatedText: text,
+      sourceLang,
+      targetLang,
+      status: 'fallback',
+      provider: 'fallback',
+    };
   }
 }
 
-class DeepLTranslationService implements Translator {
-  private readonly fallback = new LocalTranslationService(dictionary);
-
+class LibreTranslateTranslationService implements Translator {
   async translate(text: string, sourceLang: Lang, targetLang: Lang): Promise<TranslationOutcome> {
-    const apiKey = process.env.DEEPL_API_KEY?.trim();
-    if (!apiKey || sourceLang === targetLang) {
-      return this.fallback.translate(text, sourceLang, targetLang);
+    const trimmed = text.trim();
+    if (!trimmed || sourceLang === targetLang) {
+      return {
+        originalText: text,
+        translatedText: text,
+        sourceLang,
+        targetLang,
+        status: sourceLang === targetLang ? 'translated' : 'fallback',
+        provider: sourceLang === targetLang ? 'local' : 'fallback',
+      };
     }
 
     try {
-      const response = await fetch('https://api-free.deepl.com/v2/translate', {
-        method: 'POST',
-        headers: {
-          Authorization: `DeepL-Auth-Key ${apiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          text: [text.trim()],
-          source_lang: sourceLang.toUpperCase(),
-          target_lang: targetLang.toUpperCase(),
-        }),
-      });
+      const baseUrl = process.env.LIBRETRANSLATE_URL?.trim() || 'https://libretranslate.com';
+      const apiKey = process.env.LIBRETRANSLATE_API_KEY?.trim();
 
-      if (!response.ok) return this.fallback.translate(text, sourceLang, targetLang);
+      const body: Record<string, unknown> = {
+        q: trimmed,
+        source: sourceLang,
+        target: targetLang,
+        format: 'text',
+      };
+      if (apiKey) {
+        body.api_key = apiKey;
+      }
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 8000);
+      const response = await fetch(`${baseUrl}/translate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
 
       const data = (await response.json()) as {
-        translations?: Array<{ text?: string }>;
+        translatedText?: string;
       };
-      const translatedText = data.translations?.[0]?.text?.trim();
 
-      if (!translatedText) return this.fallback.translate(text, sourceLang, targetLang);
-
-      return {
-        originalText: text,
-        translatedText,
-        sourceLang,
-        targetLang,
-        status: 'translated',
-      };
+      const translated = data.translatedText?.trim();
+      if (translated && translated.toLowerCase() !== trimmed.toLowerCase()) {
+        return {
+          originalText: text,
+          translatedText: translated,
+          sourceLang,
+          targetLang,
+          status: 'translated',
+          provider: 'libretranslate',
+        };
+      }
     } catch {
-      return this.fallback.translate(text, sourceLang, targetLang);
+      // LibreTranslate hatası
     }
+
+    return {
+      originalText: text,
+      translatedText: text,
+      sourceLang,
+      targetLang,
+      status: 'fallback',
+      provider: 'fallback',
+    };
   }
 }
 
-class HybridTranslationService implements Translator {
+class FreeTranslationService implements Translator {
   private readonly local = new LocalTranslationService(dictionary);
-  private readonly deepl = new DeepLTranslationService();
+  private readonly mymemory = new MyMemoryTranslationService();
+  private readonly libre = new LibreTranslateTranslationService();
 
   async translate(text: string, sourceLang: Lang, targetLang: Lang): Promise<TranslationOutcome> {
     const trimmed = text.trim();
@@ -315,27 +249,42 @@ class HybridTranslationService implements Translator {
         sourceLang,
         targetLang,
         status: sourceLang === targetLang ? 'translated' : 'fallback',
+        provider: sourceLang === targetLang ? 'local' : 'fallback',
       };
     }
 
-    // 1. Önce yerel sözlük dene (hızlı, offline)
+    // 1. Local dictionary (hızlı, offline)
     const localResult = await this.local.translate(text, sourceLang, targetLang);
     if (localResult.status === 'translated') {
       return localResult;
     }
 
-    // 2. Sözlükte yoksa DeepL Free API dene (key varsa)
-    return this.deepl.translate(text, sourceLang, targetLang);
+    // 2. MyMemory API
+    const mymemoryResult = await this.mymemory.translate(text, sourceLang, targetLang);
+    if (mymemoryResult.status === 'translated') {
+      return mymemoryResult;
+    }
+
+    // 3. LibreTranslate API
+    const libreResult = await this.libre.translate(text, sourceLang, targetLang);
+    if (libreResult.status === 'translated') {
+      return libreResult;
+    }
+
+    // 4. Fallback
+    return {
+      originalText: text,
+      translatedText: text,
+      sourceLang,
+      targetLang,
+      status: 'fallback',
+      provider: 'fallback',
+    };
   }
 }
 
 function createTranslationService(): Translator {
-  const provider = process.env.TRANSLATION_PROVIDER?.trim().toLowerCase();
-
-  if (provider === 'openai') return new OpenAiTranslationService();
-  if (provider === 'google') return new GoogleTranslationService();
-  if (provider === 'deepl') return new DeepLTranslationService();
-  return new HybridTranslationService();
+  return new FreeTranslationService();
 }
 
 export const translationService: Translator = createTranslationService();

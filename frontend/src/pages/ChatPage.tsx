@@ -10,7 +10,6 @@ import UserHeader from '../components/UserHeader';
 import MessageBubble from '../components/MessageBubble';
 import ChatInput from '../components/ChatInput';
 import EmojiPicker from '../components/EmojiPicker';
-import QuickMessages from '../components/QuickMessages';
 import ImageUploadButton from '../components/ImageUploadButton';
 import VideoCallOverlay from '../components/VideoCallOverlay';
 import type { AppUser, ChatMessage, DeliveryStatus } from '../types';
@@ -29,6 +28,7 @@ const ChatPage: React.FC = () => {
   const [typing, setTyping] = useState(false);
   const [otherOnline, setOtherOnline] = useState(false);
   const [appError, setAppError] = useState('');
+  const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const typingTimeoutRef = useRef<number | null>(null);
 
@@ -199,6 +199,28 @@ const ChatPage: React.FC = () => {
 
   return (
     <div className="flex h-[100dvh] flex-col overflow-hidden bg-cream-50">
+      {selectedImage && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4"
+          onClick={() => setSelectedImage(null)}
+        >
+          <img
+            src={selectedImage}
+            alt="Preview"
+            className="max-h-full max-w-full rounded-lg object-contain shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          />
+          <button
+            type="button"
+            onClick={() => setSelectedImage(null)}
+            className="absolute right-4 top-4 rounded-full bg-white/20 p-2 text-white backdrop-blur transition hover:bg-white/40"
+            aria-label="Close"
+          >
+            <X className="h-6 w-6" />
+          </button>
+        </div>
+      )}
+
       {incomingCall && !isInCall && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
           <div className="mx-4 w-full max-w-sm rounded-2xl bg-white p-6 text-center shadow-2xl">
@@ -264,7 +286,7 @@ const ChatPage: React.FC = () => {
           )}
 
           {messages.map((message) => (
-            <MessageBubble key={message.id} message={message} isMe={message.from === user.id} />
+            <MessageBubble key={message.id} message={message} isMe={message.from === user.id} onImageClick={setSelectedImage} />
           ))}
 
           {typing && (
@@ -282,8 +304,6 @@ const ChatPage: React.FC = () => {
           <div ref={bottomRef} />
         </div>
       </main>
-
-      <QuickMessages lang={user.language} onSelect={appendToDraft} />
 
       <footer className="safe-bottom border-t border-gray-100 bg-white px-2 py-2 sm:px-4">
         <div className="mx-auto max-w-3xl">

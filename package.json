@@ -1,0 +1,15 @@
+{
+  "name": "kaplumbaga-root",
+  "private": true,
+  "scripts": {
+    "install:all": "npm install --prefix backend && npm install --prefix frontend",
+    "typecheck": "npm run typecheck --prefix backend && npm run typecheck --prefix frontend",
+    "build": "npm run build --prefix backend && npm run build --prefix frontend",
+    "build:backend": "npm run build --prefix backend",
+    "build:frontend": "npm run build --prefix frontend",
+    "dev:backend": "npm run dev --prefix backend",
+    "dev:frontend": "npm run dev --prefix frontend",
+    "prisma:generate": "npx prisma generate --schema backend/prisma/schema.prisma",
+    "cap:sync": "npm run build --prefix frontend && npx cap sync android --prefix frontend"
+  }
+}

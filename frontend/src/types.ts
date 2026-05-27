@@ -1,6 +1,7 @@
 export type Language = 'tr' | 'th';
 export type MessageType = 'text' | 'image';
 export type TranslationStatus = 'translated' | 'fallback';
+export type TranslationProvider = 'local' | 'mymemory' | 'libretranslate' | 'fallback';
 export type DeliveryStatus = 'sent' | 'delivered' | 'read';
 
 export interface AppUser {
@@ -23,6 +24,7 @@ export interface ChatMessage {
   sourceLang: Language;
   targetLang: Language;
   status: TranslationStatus;
+  provider?: TranslationProvider;
   deliveryStatus?: DeliveryStatus;
 }
 
