@@ -256,17 +256,10 @@ class MyMemoryTranslationService implements Translator {
           };
         }
       }
-    } catch {
-      // MyMemory hatası, fallback döneceğiz
+      throw new Error('MyMemory returned empty or same translation');
+    } catch (err) {
+      throw new Error(`MyMemory API failed: ${(err as Error).message}`);
     }
-
-    return {
-      originalText: text,
-      translatedText: text,
-      sourceLang,
-      targetLang,
-      status: 'fallback',
-    };
   }
 }
 
