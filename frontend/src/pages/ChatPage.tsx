@@ -142,7 +142,7 @@ const ChatPage: React.FC = () => {
 
   const rejectCall = () => {
     if (otherUser) {
-      socket.emit('end_call', { to: otherUser.id });
+      socket.emit('call_rejected', { to: otherUser.id });
     }
     setIncomingCall(null);
   };
@@ -247,7 +247,14 @@ const ChatPage: React.FC = () => {
         selfName={user.displayName}
         selfLang={user.language}
         online={otherOnline}
-        onVideoCall={() => { if (!isInCall) startCall(); }}
+        onVideoCall={() => {
+          if (isInCall) return;
+          if (!otherOnline) {
+            setAppError(t('userOffline'));
+            return;
+          }
+          startCall();
+        }}
         onSettings={() => navigate('/settings')}
         onLogout={handleLogout}
       />

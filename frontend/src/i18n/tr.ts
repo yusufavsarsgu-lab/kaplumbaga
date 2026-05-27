@@ -104,6 +104,8 @@ export const tr: TranslationBundle = {
     inCall: 'Görüşmede',
     callEnded: 'Arama sonlandı',
     callFailed: 'Arama bağlantısı başarısız oldu',
+    callRejected: 'Arama reddedildi',
+    userOffline: 'Karşı taraf çevrimdışı',
     incomingCall: 'Gelen arama',
     incomingCallFrom: '{{name}} sizi arıyor...',
     accept: 'Kabul et',

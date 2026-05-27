@@ -13,6 +13,22 @@ import { useCallStore } from '../store/callStore';
 import { socket } from '../services/socket';
 import { getIceServers } from '../services/webrtc';
 
+function waitForIceGatheringComplete(pc: RTCPeerConnection): Promise<void> {
+  return new Promise((resolve) => {
+    if (pc.iceGatheringState === 'complete') {
+      resolve();
+      return;
+    }
+    const checkState = () => {
+      if (pc.iceGatheringState === 'complete') {
+        pc.removeEventListener('icegatheringstatechange', checkState);
+        resolve();
+      }
+    };
+    pc.addEventListener('icegatheringstatechange', checkState);
+  });
+}
+
 function getMediaErrorMessage(error: unknown, t: (key: string) => string): string {
   if (error instanceof DOMException) {
     if (error.name === 'NotAllowedError' || error.name === 'SecurityError') return t('cameraDenied');
@@ -135,7 +151,9 @@ const VideoCallOverlay: React.FC = () => {
         const pc = createPeerConnection(localStream);
         const offer = await pc.createOffer();
         await pc.setLocalDescription(offer);
-        socket.emit('call_offer', { to: otherUser!.id, offer });
+        await waitForIceGatheringComplete(pc);
+        if (!active) return;
+        socket.emit('call_offer', { to: otherUser!.id, offer: pc.localDescription });
       } catch (err) {
         if (!active) return;
         setErrorMsg(getMediaErrorMessage(err, t));
@@ -164,7 +182,9 @@ const VideoCallOverlay: React.FC = () => {
         }
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
-        socket.emit('call_answer', { to: otherUser!.id, answer });
+        await waitForIceGatheringComplete(pc);
+        if (!active) return;
+        socket.emit('call_answer', { to: otherUser!.id, answer: pc.localDescription });
       } catch (err) {
         if (!active) return;
         setErrorMsg(getMediaErrorMessage(err, t));
@@ -207,7 +227,14 @@ const VideoCallOverlay: React.FC = () => {
       finishCall(false);
     };
 
+    const onCallRejected = () => {
+      setErrorMsg(t('callRejected'));
+      setCallStatus('error');
+      finishCall(false);
+    };
+
     socket.on('call_accepted', onCallAccepted);
+    socket.on('call_rejected', onCallRejected);
     socket.on('ice_candidate', onIceCandidate);
     socket.on('call_ended', onCallEnded);
 
@@ -232,6 +259,7 @@ const VideoCallOverlay: React.FC = () => {
         timeoutRef.current = null;
       }
       socket.off('call_accepted', onCallAccepted);
+      socket.off('call_rejected', onCallRejected);
       socket.off('ice_candidate', onIceCandidate);
       socket.off('call_ended', onCallEnded);
 

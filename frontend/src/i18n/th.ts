@@ -104,6 +104,8 @@ export const th: TranslationBundle = {
     inCall: 'กำลังสนทนา',
     callEnded: 'สิ้นสุดสาย',
     callFailed: 'การโทรล้มเหลว',
+    callRejected: 'สายถูกปฏิเสธ',
+    userOffline: 'อีกฝ่ายออฟไลน์',
     incomingCall: 'สายเข้า',
     incomingCallFrom: '{{name}} กำลังโทรหาคุณ...',
     accept: 'รับสาย',

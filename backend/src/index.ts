@@ -51,6 +51,7 @@ interface ClientToServerEvents {
   typing: (data: { from?: string; to: string }) => void;
   call_offer: (data: { from?: string; to: string; offer: unknown }) => void;
   call_answer: (data: { to: string; answer: unknown }) => void;
+  call_rejected: (data: { to: string }) => void;
   ice_candidate: (data: { to: string; candidate: unknown }) => void;
   end_call: (data: { to: string }) => void;
 }
@@ -65,6 +66,7 @@ interface ServerToClientEvents {
   messages_status_updated: (data: { messageIds: string[]; status: DeliveryStatus }) => void;
   incoming_call: (data: { from: string; offer: unknown }) => void;
   call_accepted: (data: { answer: unknown }) => void;
+  call_rejected: () => void;
   ice_candidate: (data: { candidate: unknown }) => void;
   call_ended: () => void;
   app_error: (error: { message: string }) => void;
@@ -414,6 +416,14 @@ io.on('connection', async (socket) => {
 
   socket.on('ice_candidate', (data) => {
     emitToUser(data.to, 'ice_candidate', { candidate: data.candidate });
+  });
+
+  socket.on('call_rejected', async (data) => {
+    await prisma.callLog.updateMany({
+      where: { callerId: data.to, receiverId: profile.id, status: 'ringing' },
+      data: { status: 'rejected' },
+    });
+    emitToUser(data.to, 'call_rejected');
   });
 
   socket.on('end_call', async (data) => {
