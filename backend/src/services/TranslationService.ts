@@ -1,3 +1,5 @@
+import { dictionary, type DictionaryEntry } from './dictionary';
+
 export type Lang = 'tr' | 'th';
 export type TranslationStatus = 'translated' | 'fallback';
 
@@ -12,14 +14,6 @@ export interface TranslationOutcome {
 export interface Translator {
   translate(text: string, sourceLang: Lang, targetLang: Lang): Promise<TranslationOutcome>;
 }
-
-interface DictionaryEntry {
-  tr: string;
-  th: string;
-  aliases?: string[];
-}
-
-const dictionary: DictionaryEntry[] = [];
 
 // Emoji + Variation Selector + ZWJ + Symbol/Pictograph kaldırıcı.
 // Modern V8/Node 20+ Unicode property escapes destekler.
