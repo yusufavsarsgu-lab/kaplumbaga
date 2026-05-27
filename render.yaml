@@ -26,8 +26,8 @@ services:
           property: connectionString
       - key: JWT_SECRET
         generateValue: true
-      - key: TRANSLATION_PROVIDER
-        value: local
+      - key: NODE_VERSION
+        value: "20"
       - key: OPENAI_API_KEY
         sync: false
       - key: OPENAI_TRANSLATION_MODEL

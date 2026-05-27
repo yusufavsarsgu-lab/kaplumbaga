@@ -234,7 +234,11 @@ class MyMemoryTranslationService implements Translator {
 
     try {
       const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(trimmed)}&langpair=${sourceLang}|${targetLang}`;
-      const response = await fetch(url, { signal: AbortSignal.timeout(8000) });
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 8000);
+      const response = await fetch(url, { signal: controller.signal });
+      clearTimeout(timeoutId);
+
       const data = (await response.json()) as {
         responseData?: { translatedText?: string };
         responseStatus?: number;
