@@ -120,8 +120,13 @@ const io = new Server<ClientToServerEvents, ServerToClientEvents, InterServerEve
 app.use(cors(corsOptions));
 app.use(express.json({ limit: '4mb' }));
 
-app.get('/health', (_req, res) => {
-  res.json({ status: 'ok', service: 'kaplumbaga-api' });
+app.get('/health', async (_req, res) => {
+  try {
+    const test = await translateText('hello', 'tr', 'th');
+    res.json({ status: 'ok', service: 'kaplumbaga-api', translation: test });
+  } catch (err) {
+    res.json({ status: 'ok', service: 'kaplumbaga-api', translationError: (err as Error).message });
+  }
 });
 
 app.use('/api/auth', authRoutes);
