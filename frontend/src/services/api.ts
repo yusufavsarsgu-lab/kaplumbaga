@@ -1,13 +1,13 @@
 import { useAuthStore } from '../store/authStore';
 
-function getLocalApiUrl(): string {
-  if (import.meta.env.PROD) return '';
+function getApiUrl(): string {
+  if (import.meta.env.PROD) return 'https://kaplumbaga-api.onrender.com';
 
   const { protocol, hostname } = window.location;
   return `${protocol}//${hostname}:4000`;
 }
 
-const rawApiUrl = import.meta.env.VITE_API_URL || getLocalApiUrl();
+const rawApiUrl = import.meta.env.VITE_API_URL || getApiUrl();
 
 export const API_URL = rawApiUrl.replace(/\/$/, '');
 

@@ -16,6 +16,7 @@ backend/prisma/*.db-wal
 backend/prisma/*.db-shm
 .DS_Store
 .vscode/
+.netlify/
 *.log
 npm-debug.log*
 yarn-debug.log*
