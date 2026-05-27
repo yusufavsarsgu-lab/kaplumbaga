@@ -99,16 +99,6 @@ const ChatPage: React.FC = () => {
       setAppError(t('errorOccurred'));
     };
 
-    const onIncomingCall = (data: { from: string; offer: unknown }) => {
-      if (data.from === otherUser.id) {
-        setIncomingCall({ from: data.from, offer: data.offer as RTCSessionDescriptionInit });
-      }
-    };
-
-    const onCallEnded = () => {
-      setIncomingCall(null);
-    };
-
     socket.on('receive_message', onMessage);
     socket.on('chat_history', onHistory);
     socket.on('typing', onTyping);
@@ -116,8 +106,6 @@ const ChatPage: React.FC = () => {
     socket.on('user_online', onUserOnline);
     socket.on('user_offline', onUserOffline);
     socket.on('app_error', onAppError);
-    socket.on('incoming_call', onIncomingCall);
-    socket.on('call_ended', onCallEnded);
     socket.on('messages_status_updated', onStatusUpdated);
 
     connectSocket(token);
@@ -131,8 +119,6 @@ const ChatPage: React.FC = () => {
       socket.off('user_online', onUserOnline);
       socket.off('user_offline', onUserOffline);
       socket.off('app_error', onAppError);
-      socket.off('incoming_call', onIncomingCall);
-      socket.off('call_ended', onCallEnded);
       socket.off('messages_status_updated', onStatusUpdated);
 
       if (typingTimeoutRef.current) {
