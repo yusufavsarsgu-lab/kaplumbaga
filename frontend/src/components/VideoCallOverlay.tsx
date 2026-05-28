@@ -98,7 +98,11 @@ const VideoCallOverlay: React.FC = () => {
     const isAnswerer = Boolean(currentOffer);
 
     function createPeerConnection(localStream: MediaStream): RTCPeerConnection {
-      const pc = new RTCPeerConnection({ iceServers: getIceServers() });
+      const pc = new RTCPeerConnection({
+        iceServers: getIceServers(),
+        bundlePolicy: 'max-bundle',
+        rtcpMuxPolicy: 'require',
+      });
       pcRef.current = pc;
 
       // Önceki buffer'daki candidate'ları ekle (eğer remote description zaten set edilmişse)
@@ -123,6 +127,7 @@ const VideoCallOverlay: React.FC = () => {
 
       pc.onicecandidate = (event) => {
         if (event.candidate) {
+          console.log('[WebRTC] sending ICE:', event.candidate.candidate.substring(0, 40) + '...');
           socket.emit('ice_candidate', { to: otherUser!.id, candidate: event.candidate.toJSON() });
         }
       };
@@ -132,6 +137,7 @@ const VideoCallOverlay: React.FC = () => {
         if (pc.connectionState === 'connected') {
           setCallStatus('in-call');
         } else if (pc.connectionState === 'failed') {
+          console.error('[WebRTC] Connection FAILED. iceGatheringState:', pc.iceGatheringState);
           setErrorMsg(t('callFailed'));
           setCallStatus('error');
         }
@@ -142,8 +148,10 @@ const VideoCallOverlay: React.FC = () => {
 
     async function startAsCaller() {
       try {
+        console.log('[WebRTC] Caller: getting user media...');
         const localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
         if (!active) { localStream.getTracks().forEach((tr) => tr.stop()); return; }
+        console.log('[WebRTC] Caller: got media stream');
 
         localStreamRef.current = localStream;
         setStreamReady(true);
@@ -152,10 +160,14 @@ const VideoCallOverlay: React.FC = () => {
         const pc = createPeerConnection(localStream);
         const offer = await pc.createOffer();
         await pc.setLocalDescription(offer);
+        console.log('[WebRTC] Caller: waiting ICE gathering...');
         await waitForIceGatheringComplete(pc);
+        console.log('[WebRTC] Caller: ICE complete. Sending offer with', pendingCandidatesRef.current.length, 'buffered candidates');
         if (!active) return;
         socket.emit('call_offer', { to: otherUser!.id, offer: pc.localDescription });
+        console.log('[WebRTC] Caller: offer sent');
       } catch (err) {
+        console.error('[WebRTC] Caller error:', err);
         if (!active) return;
         setErrorMsg(getMediaErrorMessage(err, t));
         setCallStatus('error');
@@ -165,15 +177,19 @@ const VideoCallOverlay: React.FC = () => {
     async function startAsAnswerer() {
       if (!currentOffer) return;
       try {
+        console.log('[WebRTC] Answerer: getting user media...');
         const localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
         if (!active) { localStream.getTracks().forEach((tr) => tr.stop()); return; }
+        console.log('[WebRTC] Answerer: got media stream');
 
         localStreamRef.current = localStream;
         setStreamReady(true);
         if (localVideoRef.current) localVideoRef.current.srcObject = localStream;
 
         const pc = createPeerConnection(localStream);
+        console.log('[WebRTC] Answerer: setting remote desc...');
         await pc.setRemoteDescription(new RTCSessionDescription(currentOffer));
+        console.log('[WebRTC] Answerer: remote desc set');
         // Remote description set edildikten sonra buffer'daki candidate'ları ekle
         while (pendingCandidatesRef.current.length > 0) {
           const cand = pendingCandidatesRef.current.shift();
@@ -183,10 +199,14 @@ const VideoCallOverlay: React.FC = () => {
         }
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
+        console.log('[WebRTC] Answerer: waiting ICE gathering...');
         await waitForIceGatheringComplete(pc);
+        console.log('[WebRTC] Answerer: ICE complete. Sending answer');
         if (!active) return;
         socket.emit('call_answer', { to: otherUser!.id, answer: pc.localDescription });
+        console.log('[WebRTC] Answerer: answer sent');
       } catch (err) {
+        console.error('[WebRTC] Answerer error:', err);
         if (!active) return;
         setErrorMsg(getMediaErrorMessage(err, t));
         setCallStatus('error');
@@ -214,10 +234,12 @@ const VideoCallOverlay: React.FC = () => {
     const onIceCandidate = async (data: { candidate: unknown }) => {
       const pc = pcRef.current;
       if (!pc || !pc.remoteDescription) {
+        console.log('[WebRTC] buffering ICE (no remoteDesc yet)');
         pendingCandidatesRef.current.push(data.candidate as RTCIceCandidateInit);
         return;
       }
       try {
+        console.log('[WebRTC] adding received ICE');
         await pc.addIceCandidate(new RTCIceCandidate(data.candidate as RTCIceCandidateInit));
       } catch {
         // ignored
