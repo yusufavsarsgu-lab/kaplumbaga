@@ -7,7 +7,7 @@ import authRoutes from './routes/auth';
 import { prisma } from './db/prisma';
 import { getBearerToken, verifyAuthToken } from './services/AuthService';
 import { translateText, translateLongText, type TranslationProvider } from './services/TranslationService';
-import { saveFcmToken, sendPushNotification } from './services/PushNotificationService';
+import { saveFcmToken, queueNotification, getPendingNotifications } from './services/PushNotificationService';
 
 const app = express();
 const httpServer = createServer(app);
@@ -79,6 +79,7 @@ interface ServerToClientEvents {
   call_ended: () => void;
   app_error: (error: { message: string }) => void;
   stories_update: (stories: Array<{ id: string; userId: string; mediaData: string; type: string; caption?: string | null; createdAt: string; viewed: boolean }>) => void;
+  show_notification: (data: { title: string; body: string; data?: Record<string, string> }) => void;
 }
 
 interface InterServerEvents {
@@ -313,6 +314,12 @@ io.on('connection', async (socket) => {
   socket.on('register', async () => {
     socket.emit('presence_state', getOnlinePublicUsers());
     socket.emit('chat_history', await getConversationMessages(profile.id));
+
+    // Bekleyen bildirimleri gönder
+    const pending = getPendingNotifications(profile.id);
+    for (const n of pending) {
+      socket.emit('show_notification', { title: n.title, body: n.body, data: n.data });
+    }
   });
 
   socket.on('register_fcm_token', async (data) => {
@@ -393,14 +400,21 @@ io.on('connection', async (socket) => {
       socket.emit('receive_message', chatMessage);
       emitToUser(receiver.id, 'receive_message', chatMessage);
 
-      // Push bildirim gönder (kullanıcı çevrimdışıysa)
+      // Bildirim kuyruğa al (kullanıcı çevrimdışıysa)
       if (!onlineUsers.has(receiver.id)) {
         const pushTitle = sender.displayName;
         const pushBody = type === 'image' ? 'Resim gönderdi' : type === 'audio' ? 'Sesli mesaj gönderdi' : type === 'file' ? 'Dosya gönderdi' : (chatMessage.originalText || 'Yeni mesaj');
-        void sendPushNotification(receiver.id, pushTitle, pushBody, {
+        queueNotification(receiver.id, pushTitle, pushBody, {
           messageId: chatMessage.id,
           senderId: sender.id,
           type,
+        });
+      } else {
+        // Kullanıcı çevrimiçiyse socket ile bildirim gönder
+        emitToUser(receiver.id, 'show_notification', {
+          title: sender.displayName,
+          body: type === 'image' ? 'Resim gönderdi' : type === 'audio' ? 'Sesli mesaj gönderdi' : type === 'file' ? 'Dosya gönderdi' : (chatMessage.originalText || 'Yeni mesaj'),
+          data: { messageId: chatMessage.id, senderId: sender.id, type },
         });
       }
     } catch (error) {

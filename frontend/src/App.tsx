@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { App as CapApp } from '@capacitor/app';
-import { initPushNotifications } from './services/pushNotifications';
+import { initLocalNotifications } from './services/localNotifications';
 import LoginPage from './pages/LoginPage';
 import ChatPage from './pages/ChatPage';
 import SettingsPage from './pages/SettingsPage';
@@ -19,7 +19,7 @@ function AppRoutes() {
   }, [theme]);
 
   useEffect(() => {
-    void initPushNotifications();
+    void initLocalNotifications();
   }, []);
 
   useEffect(() => {
