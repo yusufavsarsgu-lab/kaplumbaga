@@ -60,7 +60,7 @@ interface ClientToServerEvents {
 
 interface ServerToClientEvents {
   user_online: (user: PublicUser) => void;
-  user_offline: (user: { id: string }) => void;
+  user_offline: (user: { id: string; lastSeen?: string }) => void;
   presence_state: (users: PublicUser[]) => void;
   chat_history: (messages: ChatMessage[]) => void;
   receive_message: (message: ChatMessage) => void;
@@ -473,12 +473,14 @@ io.on('connection', async (socket) => {
     emitToUser(data.to, 'call_ended');
   });
 
-  socket.on('disconnect', () => {
+  socket.on('disconnect', async () => {
     const online = onlineUsers.get(profile.id);
 
     if (online && online.socketId === socket.id) {
       onlineUsers.delete(profile.id);
-      socket.broadcast.emit('user_offline', { id: profile.id });
+      const now = new Date();
+      await prisma.user.update({ where: { id: profile.id }, data: { lastSeen: now } });
+      socket.broadcast.emit('user_offline', { id: profile.id, lastSeen: now.toISOString() });
     }
   });
 });

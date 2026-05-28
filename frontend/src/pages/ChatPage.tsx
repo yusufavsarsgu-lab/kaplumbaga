@@ -29,6 +29,7 @@ const ChatPage: React.FC = () => {
   const [pendingImage, setPendingImage] = useState<string | null>(null);
   const [typing, setTyping] = useState(false);
   const [otherOnline, setOtherOnline] = useState(false);
+  const [otherLastSeen, setOtherLastSeen] = useState<string | null>(null);
   const [appError, setAppError] = useState('');
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -101,8 +102,11 @@ const ChatPage: React.FC = () => {
       if (onlineUser.id === otherUser.id) setOtherOnline(true);
     };
 
-    const onUserOffline = (offlineUser: { id: string }) => {
-      if (offlineUser.id === otherUser.id) setOtherOnline(false);
+    const onUserOffline = (offlineUser: { id: string; lastSeen?: string }) => {
+      if (offlineUser.id === otherUser.id) {
+        setOtherOnline(false);
+        if (offlineUser.lastSeen) setOtherLastSeen(offlineUser.lastSeen);
+      }
     };
 
     const onAppError = () => {
@@ -271,6 +275,7 @@ const ChatPage: React.FC = () => {
         selfName={user.displayName}
         selfLang={user.language}
         online={otherOnline}
+        lastSeen={otherLastSeen}
         onVideoCall={() => {
           if (isInCall) return;
           if (!otherOnline) {
