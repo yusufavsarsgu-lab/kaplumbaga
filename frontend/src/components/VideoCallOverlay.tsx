@@ -160,7 +160,10 @@ const VideoCallOverlay: React.FC = () => {
     async function startAsCaller() {
       try {
         console.log('[WebRTC] Caller: getting user media...');
-        const localStream = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 640 }, height: { ideal: 480 } }, audio: true });
+        const localStream = await navigator.mediaDevices.getUserMedia({
+          video: { width: { ideal: 640 }, height: { ideal: 480 } },
+          audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+        });
         if (!active) { localStream.getTracks().forEach((tr) => tr.stop()); return; }
         console.log('[WebRTC] Caller: got media stream');
 
@@ -189,7 +192,10 @@ const VideoCallOverlay: React.FC = () => {
       if (!currentOffer) return;
       try {
         console.log('[WebRTC] Answerer: getting user media...');
-        const localStream = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 640 }, height: { ideal: 480 } }, audio: true });
+        const localStream = await navigator.mediaDevices.getUserMedia({
+          video: { width: { ideal: 640 }, height: { ideal: 480 } },
+          audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+        });
         if (!active) { localStream.getTracks().forEach((tr) => tr.stop()); return; }
         console.log('[WebRTC] Answerer: got media stream');
 
@@ -328,9 +334,22 @@ const VideoCallOverlay: React.FC = () => {
     });
   };
 
-  if (!isInCall) return null;
-
   const isMini = callMode === 'mini';
+
+  // Android back button - arama sirasinda uygulamayi kapatma, minimize et
+  useEffect(() => {
+    if (!isInCall) return;
+    const handler = (e: Event) => {
+      if (!isMini) {
+        e.preventDefault();
+        toggleMode();
+      }
+    };
+    document.addEventListener('backbutton', handler);
+    return () => document.removeEventListener('backbutton', handler);
+  }, [isInCall, isMini, toggleMode]);
+
+  if (!isInCall) return null;
 
   return (
     <div
