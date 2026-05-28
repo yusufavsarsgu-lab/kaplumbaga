@@ -53,6 +53,7 @@ export const th: TranslationBundle = {
     original: 'ต้นฉบับ',
     translation: 'คำแปล',
     translationNotFound: 'ไม่พบคำแปล',
+    translationFailed: 'การแปลล้มเหลว',
     imageSelected: 'เลือกรูปภาพแล้ว',
     imageReady: 'รูปภาพพร้อมส่ง',
     imagePreview: 'ตัวอย่างก่อนส่ง',

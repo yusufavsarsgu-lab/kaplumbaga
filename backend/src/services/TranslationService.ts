@@ -1,7 +1,7 @@
 import { dictionary, type DictionaryEntry } from './dictionary';
 
 export type Lang = 'tr' | 'th';
-export type TranslationStatus = 'translated' | 'fallback';
+export type TranslationStatus = 'translated' | 'fallback' | 'failed';
 export type TranslationProvider = 'local' | 'mymemory' | 'libretranslate' | 'fallback';
 
 export interface TranslationOutcome {
@@ -167,6 +167,18 @@ class MyMemoryTranslationService implements Translator {
   }
 }
 
+function getLibreTranslateConfig(): { baseUrl: string; apiKey: string | undefined } {
+  const baseUrl =
+    process.env.LIBRETRANSLATE_URL?.trim() ||
+    process.env.TRANSLATION_API_URL?.trim() ||
+    'https://libretranslate.com';
+  const apiKey =
+    process.env.LIBRETRANSLATE_API_KEY?.trim() ||
+    process.env.TRANSLATION_API_KEY?.trim() ||
+    undefined;
+  return { baseUrl, apiKey };
+}
+
 class LibreTranslateTranslationService implements Translator {
   async translate(text: string, sourceLang: Lang, targetLang: Lang): Promise<TranslationOutcome> {
     const trimmed = text.trim();
@@ -182,8 +194,7 @@ class LibreTranslateTranslationService implements Translator {
     }
 
     try {
-      const baseUrl = process.env.LIBRETRANSLATE_URL?.trim() || 'https://libretranslate.com';
-      const apiKey = process.env.LIBRETRANSLATE_API_KEY?.trim();
+      const { baseUrl, apiKey } = getLibreTranslateConfig();
 
       const body: Record<string, unknown> = {
         q: trimmed,
@@ -296,4 +307,132 @@ export function translateText(text: string, sourceLang: Lang, targetLang: Lang):
 export function autoTranslate(text: string, fromLang: Lang): Promise<TranslationOutcome> {
   const targetLang: Lang = fromLang === 'tr' ? 'th' : 'tr';
   return translateText(text, fromLang, targetLang);
+}
+
+const MAX_CHUNK_LENGTH = 500;
+
+export function detectLanguage(text: string): 'tr' | 'th' | 'unknown' {
+  const trimmed = text.trim();
+  if (!trimmed) return 'unknown';
+
+  // Thai Unicode range: U+0E00 to U+0E7F
+  const thaiRegex = /[\u0E00-\u0E7F]/;
+  // Turkish-specific characters
+  const turkishRegex = /[çğıöşüÇĞİÖŞÜâêîôûÂÊÎÔÛ]/;
+
+  let thaiCount = 0;
+  let turkishCount = 0;
+  let totalLetters = 0;
+
+  for (const char of trimmed) {
+    if (/\p{L}/u.test(char)) {
+      totalLetters++;
+      if (thaiRegex.test(char)) thaiCount++;
+      if (turkishRegex.test(char)) turkishCount++;
+    }
+  }
+
+  if (totalLetters === 0) return 'unknown';
+
+  if (thaiCount / totalLetters > 0.3) return 'th';
+  if (turkishCount / totalLetters > 0.05) return 'tr';
+
+  // If no distinctive characters, check if text contains common Thai words
+  const thaiWordPatterns = /\b(ครับ|ค่ะ|สวัสดี|ขอบคุณ|ที่รัก|ฉัน|ผม|เธอ|เขา|เรา|ดี|รัก|กิน|ไป|มา|นี้|นั้น|อะไร|ทำไม|อย่างไร|ใช่|ไม่|มี|ไม่มี|ก็|แล้ว|แต่|หรือ|และ|กับ|ของ|ใน|ที่|จาก|ถึง|โดย|เมื่อ|ก่อน|หลัง|ขณะ|เพราะ|เพื่อ|ถ้า|ถึงแม้|แม้ว่า|อย่างไรก็ตาม|ดังนั้น|เพราะฉะนั้น)\b/;
+  const turkishWordPatterns = /\b(merhaba|nasıl|teşekkür|evet|hayır|lütfen|affedersin|günaydın|iyi|akşamlar|güle|güle|hoş|geldiniz|hoşça|kal|selam|sevgi|saygı|mutlu|üzgün|yorgun|acıkmış|susamış|sıcak|soğuk|güzel|çirkin|büyük|küçük|uzun|kısa|hızlı|yavaş|yeni|eski|temiz|kirli|açık|kapalı|boş|dol|doğru|yanlış|kolay|zor|ucuz|pahalı|zengin|fakir|güçlü|zayıf|sağlıklı|hasta|mutluluk|hüzün|korku|cesaret|umut|hayal|gerçek|yalan|doğa|deniz|göl|nehir|dağ|ova|orman|çöl|gökyüzü|yıldız|ay|güneş|dünya|ü|ı|ö|ş|ğ|ç)\b/i;
+
+  if (thaiWordPatterns.test(trimmed)) return 'th';
+  if (turkishWordPatterns.test(trimmed)) return 'tr';
+
+  return 'unknown';
+}
+
+export function splitLongText(text: string, maxLength = MAX_CHUNK_LENGTH): string[] {
+  const trimmed = text.trim();
+  if (trimmed.length <= maxLength) return [trimmed];
+
+  const chunks: string[] = [];
+  let current = '';
+
+  // Split by sentences first (. ! ?), then by spaces
+  const sentences = trimmed.split(/([.!?]+\s*)/);
+  for (const sentence of sentences) {
+    if (!sentence) continue;
+    if ((current + sentence).length <= maxLength) {
+      current += sentence;
+    } else {
+      if (current) chunks.push(current.trim());
+      // If single sentence is too long, split by spaces
+      if (sentence.length > maxLength) {
+        const words = sentence.split(/(\s+)/);
+        current = '';
+        for (const word of words) {
+          if ((current + word).length <= maxLength) {
+            current += word;
+          } else {
+            if (current.trim()) chunks.push(current.trim());
+            current = word;
+          }
+        }
+      } else {
+        current = sentence;
+      }
+    }
+  }
+
+  if (current.trim()) chunks.push(current.trim());
+  return chunks.length > 0 ? chunks : [trimmed];
+}
+
+export async function translateLongText(
+  text: string,
+  sourceLang: Lang,
+  targetLang: Lang
+): Promise<TranslationOutcome> {
+  const trimmed = text.trim();
+  if (!trimmed || sourceLang === targetLang) {
+    return {
+      originalText: text,
+      translatedText: text,
+      sourceLang,
+      targetLang,
+      status: sourceLang === targetLang ? 'translated' : 'fallback',
+      provider: sourceLang === targetLang ? 'local' : 'fallback',
+    };
+  }
+
+  const chunks = splitLongText(trimmed);
+
+  // Single chunk: direct translate
+  if (chunks.length === 1) {
+    return translateText(trimmed, sourceLang, targetLang);
+  }
+
+  // Multiple chunks: translate each, then combine
+  try {
+    const translatedParts: string[] = [];
+    for (const chunk of chunks) {
+      const result = await translateText(chunk, sourceLang, targetLang);
+      translatedParts.push(result.translatedText || chunk);
+    }
+
+    return {
+      originalText: text,
+      translatedText: translatedParts.join(' '),
+      sourceLang,
+      targetLang,
+      status: 'translated',
+      provider: 'libretranslate',
+    };
+  } catch (err) {
+    console.error('[Translation] Long text translation failed:', err);
+    return {
+      originalText: text,
+      translatedText: text,
+      sourceLang,
+      targetLang,
+      status: 'failed',
+      provider: 'fallback',
+    };
+  }
 }

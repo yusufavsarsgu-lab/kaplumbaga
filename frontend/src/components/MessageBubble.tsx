@@ -59,6 +59,12 @@ const MessageBubble: React.FC<Props> = ({ message, isMe, onImageClick }) => {
           </span>
         )}
 
+        {message.status === 'failed' && message.type !== 'image' && (
+          <span className={`mt-1 block text-[10px] ${isMe ? 'text-green-50/70' : 'text-gray-400'}`}>
+            {t('translationFailed')}
+          </span>
+        )}
+
         <span className={`mt-1 flex items-center justify-end gap-1 text-[10px] ${isMe ? 'text-green-50' : 'text-gray-400'}`}>
           {time}
           {message.provider && message.provider !== 'fallback' && (

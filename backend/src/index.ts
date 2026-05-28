@@ -6,7 +6,7 @@ import cors from 'cors';
 import authRoutes from './routes/auth';
 import { prisma } from './db/prisma';
 import { getBearerToken, verifyAuthToken } from './services/AuthService';
-import { translateText, type TranslationProvider } from './services/TranslationService';
+import { translateText, translateLongText, type TranslationProvider } from './services/TranslationService';
 
 const app = express();
 const httpServer = createServer(app);
@@ -327,17 +327,21 @@ io.on('connection', async (socket) => {
       }
 
       const deliveryStatus: DeliveryStatus = onlineUsers.has(receiver.id) ? 'delivered' : 'sent';
-      const translation =
-        type === 'image'
-          ? {
-              originalText: rawText,
-              translatedText: rawText,
-              sourceLang: sender.language as Language,
-              targetLang: receiver.language as Language,
-              status: 'translated' as TranslationStatus,
-              provider: 'local' as TranslationProvider,
-            }
-          : await translateText(rawText, sender.language as Language, receiver.language as Language);
+      let translation;
+      if (type === 'image') {
+        translation = {
+          originalText: rawText,
+          translatedText: rawText,
+          sourceLang: sender.language as Language,
+          targetLang: receiver.language as Language,
+          status: 'translated' as TranslationStatus,
+          provider: 'local' as TranslationProvider,
+        };
+      } else if (rawText.length > 500) {
+        translation = await translateLongText(rawText, sender.language as Language, receiver.language as Language);
+      } else {
+        translation = await translateText(rawText, sender.language as Language, receiver.language as Language);
+      }
 
       const created = await prisma.message.create({
         data: {

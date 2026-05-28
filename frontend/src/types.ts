@@ -1,6 +1,6 @@
 export type Language = 'tr' | 'th';
 export type MessageType = 'text' | 'image';
-export type TranslationStatus = 'translated' | 'fallback';
+export type TranslationStatus = 'translated' | 'fallback' | 'failed';
 export type TranslationProvider = 'local' | 'mymemory' | 'libretranslate' | 'fallback';
 export type DeliveryStatus = 'sent' | 'delivered' | 'read';
 
