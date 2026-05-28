@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
+import { App as CapApp } from '@capacitor/app';
 import LoginPage from './pages/LoginPage';
 import ChatPage from './pages/ChatPage';
 import SettingsPage from './pages/SettingsPage';
@@ -15,6 +16,19 @@ function AppRoutes() {
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
   }, [theme]);
+
+  useEffect(() => {
+    const setupBackButton = async () => {
+      await CapApp.addListener('backButton', ({ canGoBack }) => {
+        if (canGoBack) {
+          window.history.back();
+        } else {
+          CapApp.minimizeApp();
+        }
+      });
+    };
+    setupBackButton();
+  }, []);
 
   useEffect(() => {
     const onIncomingCall = (data: { from: string; offer: unknown }) => {
