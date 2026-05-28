@@ -23,6 +23,7 @@ model User {
   receivedMessages Message[] @relation("ReceivedMessages")
   outgoingCalls    CallLog[] @relation("OutgoingCalls")
   incomingCalls    CallLog[] @relation("IncomingCalls")
+  stories          Story[]
 }
 
 model Message {
@@ -61,4 +62,15 @@ model CallLog {
   receiver User @relation("IncomingCalls", fields: [receiverId], references: [id], onDelete: Cascade)
 
   @@index([callerId, receiverId, startedAt])
+}
+
+model Story {
+  id        String   @id @default(cuid())
+  userId    String
+  mediaData String
+  type      String   @default("image")
+  caption   String?
+  createdAt DateTime @default(now())
+  viewedBy  String?
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }

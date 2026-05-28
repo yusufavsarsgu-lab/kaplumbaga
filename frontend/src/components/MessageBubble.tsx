@@ -60,6 +60,14 @@ const MessageBubble: React.FC<Props> = ({ message, isMe, onImageClick, onDelete 
           />
         ) : message.type === 'audio' ? (
           <audio controls className="max-w-[200px] sm:max-w-[260px]" src={message.originalText} />
+        ) : message.type === 'file' ? (
+          <a
+            href={message.originalText}
+            download
+            className="flex items-center gap-2 rounded-lg bg-white/10 px-3 py-2 text-sm text-white hover:bg-white/20"
+          >
+            <span className="truncate">{t('downloadFile')}</span>
+          </a>
         ) : (
           <p className="whitespace-pre-wrap text-[15px] leading-relaxed">{primaryText}</p>
         )}

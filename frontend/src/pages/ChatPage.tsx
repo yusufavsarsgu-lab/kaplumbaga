@@ -5,14 +5,18 @@ import { useI18n } from '../i18n';
 import { useAuthStore } from '../store/authStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { useCallStore } from '../store/callStore';
+import { useStoryStore } from '../store/storyStore';
 import { connectSocket, disconnectSocket, socket } from '../services/socket';
 import UserHeader from '../components/UserHeader';
 import MessageBubble from '../components/MessageBubble';
 import ChatInput from '../components/ChatInput';
 import EmojiPicker from '../components/EmojiPicker';
 import ImageUploadButton from '../components/ImageUploadButton';
+import FileUploadButton from '../components/FileUploadButton';
 import VoiceRecorder from '../components/VoiceRecorder';
 import VideoCallOverlay from '../components/VideoCallOverlay';
+import StoryBar from '../components/StoryBar';
+import StoryViewer from '../components/StoryViewer';
 import type { AppUser, ChatMessage, DeliveryStatus } from '../types';
 
 const ChatPage: React.FC = () => {
@@ -32,6 +36,7 @@ const ChatPage: React.FC = () => {
   const [otherLastSeen, setOtherLastSeen] = useState<string | null>(null);
   const [appError, setAppError] = useState('');
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const [viewingStoryId, setViewingStoryId] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const typingTimeoutRef = useRef<number | null>(null);
 
@@ -102,6 +107,8 @@ const ChatPage: React.FC = () => {
       if (onlineUser.id === otherUser.id) setOtherOnline(true);
     };
 
+    const setStories = useStoryStore.getState().setStories;
+
     const onUserOffline = (offlineUser: { id: string; lastSeen?: string }) => {
       if (offlineUser.id === otherUser.id) {
         setOtherOnline(false);
@@ -122,9 +129,11 @@ const ChatPage: React.FC = () => {
     socket.on('app_error', onAppError);
     socket.on('messages_status_updated', onStatusUpdated);
     socket.on('message_deleted', onMessageDeleted);
+    socket.on('stories_update', setStories);
 
     connectSocket(token);
     socket.emit('register');
+    socket.emit('get_stories');
 
     return () => {
       socket.off('receive_message', onMessage);
@@ -136,6 +145,7 @@ const ChatPage: React.FC = () => {
       socket.off('app_error', onAppError);
       socket.off('messages_status_updated', onStatusUpdated);
       socket.off('message_deleted', onMessageDeleted);
+      socket.off('stories_update', setStories);
 
       if (typingTimeoutRef.current) {
         window.clearTimeout(typingTimeoutRef.current);
@@ -172,7 +182,7 @@ const ChatPage: React.FC = () => {
     return <Navigate to="/" replace />;
   }
 
-  const sendMessage = (text: string, type: 'text' | 'image' | 'audio' = 'text') => {
+  const sendMessage = (text: string, type: 'text' | 'image' | 'audio' | 'file' = 'text') => {
     const value = text.trim();
     if (!value) return;
 
@@ -268,6 +278,32 @@ const ChatPage: React.FC = () => {
       )}
 
       <VideoCallOverlay />
+
+      {viewingStoryId && (
+        <StoryViewer storyId={viewingStoryId} onClose={() => setViewingStoryId(null)} />
+      )}
+
+      <StoryBar
+        onCreate={() => {
+          const input = document.createElement('input');
+          input.type = 'file';
+          input.accept = 'image/*';
+          input.onchange = async (e) => {
+            const file = (e.target as HTMLInputElement).files?.[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = () => {
+              socket.emit('create_story', {
+                mediaData: reader.result as string,
+                type: 'image',
+              });
+            };
+            reader.readAsDataURL(file);
+          };
+          input.click();
+        }}
+        onView={(id) => setViewingStoryId(id)}
+      />
 
       <UserHeader
         name={otherUser.displayName}
@@ -368,6 +404,7 @@ const ChatPage: React.FC = () => {
           <div className="flex items-end gap-1 sm:gap-2">
             <EmojiPicker onSelect={appendToDraft} />
             <ImageUploadButton onImageSelect={setPendingImage} onError={setAppError} />
+            <FileUploadButton onFileSelect={(file) => sendMessage(file, 'file')} onError={setAppError} />
             <VoiceRecorder onAudioRecorded={(audio) => sendMessage(audio, 'audio')} />
             <ChatInput value={draft} onChange={setDraft} onSend={sendMessage} onTyping={handleTyping} />
           </div>

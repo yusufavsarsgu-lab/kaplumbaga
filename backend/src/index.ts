@@ -13,7 +13,7 @@ const app = express();
 const httpServer = createServer(app);
 
 type Language = 'tr' | 'th';
-type MessageType = 'text' | 'image' | 'audio';
+type MessageType = 'text' | 'image' | 'audio' | 'file';
 type TranslationStatus = 'translated' | 'fallback';
 type DeliveryStatus = 'sent' | 'delivered' | 'read';
 
@@ -58,6 +58,9 @@ interface ClientToServerEvents {
   ice_candidate: (data: { to: string; candidate: unknown }) => void;
   end_call: (data: { to: string }) => void;
   register_fcm_token: (data: { token: string }) => void;
+  create_story: (data: { mediaData: string; type?: string; caption?: string }) => void;
+  get_stories: () => void;
+  view_story: (data: { storyId: string }) => void;
 }
 
 interface ServerToClientEvents {
@@ -75,6 +78,7 @@ interface ServerToClientEvents {
   ice_candidate: (data: { candidate: unknown }) => void;
   call_ended: () => void;
   app_error: (error: { message: string }) => void;
+  stories_update: (stories: Array<{ id: string; userId: string; mediaData: string; type: string; caption?: string | null; createdAt: string; viewed: boolean }>) => void;
 }
 
 interface InterServerEvents {
@@ -193,8 +197,8 @@ function toChatMessage(message: {
   createdAt: Date;
 }): ChatMessage {
   const type = toMessageType(message.type);
-  const originalText = type === 'image' || type === 'audio' ? message.imageData || message.imageUrl || '' : message.originalText || '';
-  const translatedText = type === 'image' || type === 'audio' ? originalText : message.translatedText || originalText;
+  const originalText = type === 'image' || type === 'audio' || type === 'file' ? message.imageData || message.imageUrl || '' : message.originalText || '';
+  const translatedText = type === 'image' || type === 'audio' || type === 'file' ? originalText : message.translatedText || originalText;
   const provider = (message.translationProvider || 'fallback') as TranslationProvider;
 
   return {
@@ -347,9 +351,14 @@ io.on('connection', async (socket) => {
         return;
       }
 
+      if (type === 'file' && (!rawText.startsWith('data:') || rawText.length > 5_000_000)) {
+        socket.emit('app_error', { message: 'invalid_file' });
+        return;
+      }
+
       const deliveryStatus: DeliveryStatus = onlineUsers.has(receiver.id) ? 'delivered' : 'sent';
       let translation;
-      if (type === 'image' || type === 'audio') {
+      if (type === 'image' || type === 'audio' || type === 'file') {
         translation = {
           originalText: rawText,
           translatedText: rawText,
@@ -369,25 +378,25 @@ io.on('connection', async (socket) => {
           senderId: sender.id,
           receiverId: receiver.id,
           type,
-          originalText: type === 'image' || type === 'audio' ? null : translation.originalText,
-          translatedText: type === 'image' || type === 'audio' ? null : translation.translatedText,
+          originalText: type === 'image' || type === 'audio' || type === 'file' ? null : translation.originalText,
+          translatedText: type === 'image' || type === 'audio' || type === 'file' ? null : translation.translatedText,
           sourceLang: translation.sourceLang,
           targetLang: translation.targetLang,
           translationStatus: translation.status,
-          imageData: type === 'image' || type === 'audio' ? rawText : null,
+          imageData: type === 'image' || type === 'audio' || type === 'file' ? rawText : null,
           deliveryStatus,
         },
       });
 
       const chatMessage = toChatMessage(created);
-      chatMessage.provider = (type === 'image' || type === 'audio' ? 'local' : translation.provider) as TranslationProvider;
+      chatMessage.provider = (type === 'image' || type === 'audio' || type === 'file' ? 'local' : translation.provider) as TranslationProvider;
       socket.emit('receive_message', chatMessage);
       emitToUser(receiver.id, 'receive_message', chatMessage);
 
       // Push bildirim gönder (kullanıcı çevrimdışıysa)
       if (!onlineUsers.has(receiver.id)) {
         const pushTitle = sender.displayName;
-        const pushBody = type === 'image' ? 'Resim gönderdi' : type === 'audio' ? 'Sesli mesaj gönderdi' : (chatMessage.originalText || 'Yeni mesaj');
+        const pushBody = type === 'image' ? 'Resim gönderdi' : type === 'audio' ? 'Sesli mesaj gönderdi' : type === 'file' ? 'Dosya gönderdi' : (chatMessage.originalText || 'Yeni mesaj');
         void sendPushNotification(receiver.id, pushTitle, pushBody, {
           messageId: chatMessage.id,
           senderId: sender.id,
@@ -493,6 +502,68 @@ io.on('connection', async (socket) => {
       data: { status: 'ended', endedAt: new Date() },
     });
     emitToUser(data.to, 'call_ended');
+  });
+
+  socket.on('create_story', async (data) => {
+    try {
+      await prisma.story.create({
+        data: {
+          userId: profile.id,
+          mediaData: data.mediaData,
+          type: data.type || 'image',
+          caption: data.caption || null,
+        },
+      });
+      socket.emit('app_error', { message: 'story_created' });
+    } catch (err) {
+      console.error('[socket] create_story failed', err);
+      socket.emit('app_error', { message: 'story_create_failed' });
+    }
+  });
+
+  socket.on('get_stories', async () => {
+    try {
+      const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      const stories = await prisma.story.findMany({
+        where: { createdAt: { gte: twentyFourHoursAgo } },
+        include: { user: { select: { id: true, displayName: true, avatarUrl: true } } },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      const formatted = stories.map((s) => ({
+        id: s.id,
+        userId: s.userId,
+        mediaData: s.mediaData,
+        type: s.type,
+        caption: s.caption,
+        createdAt: s.createdAt.toISOString(),
+        viewed: s.viewedBy ? s.viewedBy.includes(profile.id) : false,
+        userName: s.user.displayName,
+        userAvatar: s.user.avatarUrl,
+      }));
+
+      socket.emit('stories_update', formatted);
+    } catch (err) {
+      console.error('[socket] get_stories failed', err);
+      socket.emit('app_error', { message: 'stories_fetch_failed' });
+    }
+  });
+
+  socket.on('view_story', async (data) => {
+    try {
+      const story = await prisma.story.findUnique({ where: { id: data.storyId } });
+      if (!story) return;
+      const viewers = story.viewedBy ? story.viewedBy.split(',') : [];
+      if (!viewers.includes(profile.id)) {
+        viewers.push(profile.id);
+        await prisma.story.update({
+          where: { id: data.storyId },
+          data: { viewedBy: viewers.join(',') },
+        });
+      }
+    } catch (err) {
+      console.error('[socket] view_story failed', err);
+    }
   });
 
   socket.on('disconnect', async () => {
