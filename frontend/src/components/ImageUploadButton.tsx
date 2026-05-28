@@ -8,9 +8,9 @@ interface Props {
 }
 
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
-const MAX_WIDTH = 1024;
-const MAX_HEIGHT = 1024;
-const JPEG_QUALITY = 0.75;
+const MAX_WIDTH = 800;
+const MAX_HEIGHT = 800;
+const JPEG_QUALITY = 0.6;
 
 function compressImage(file: File): Promise<string> {
   return new Promise((resolve, reject) => {

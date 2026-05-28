@@ -48,7 +48,11 @@ const SettingsPage: React.FC = () => {
   const typingIndicatorEnabled = useSettingsStore((state) => state.typingIndicatorEnabled);
   const showOriginal = useSettingsStore((state) => state.showOriginal);
   const showTranslation = useSettingsStore((state) => state.showTranslation);
+  const background = useSettingsStore((state) => state.background);
+  const videoFilter = useSettingsStore((state) => state.videoFilter);
   const setTheme = useSettingsStore((state) => state.setTheme);
+  const setBackground = useSettingsStore((state) => state.setBackground);
+  const setVideoFilter = useSettingsStore((state) => state.setVideoFilter);
   const toggleSound = useSettingsStore((state) => state.toggleSound);
   const toggleMessageSound = useSettingsStore((state) => state.toggleMessageSound);
   const toggleTypingIndicator = useSettingsStore((state) => state.toggleTypingIndicator);
@@ -160,6 +164,54 @@ const SettingsPage: React.FC = () => {
                 <p className="mt-0.5 text-xs leading-5 text-gray-500">{t('languageAuto')}</p>
               </div>
               <LanguageBadge lang={user.language} />
+            </div>
+          </div>
+
+          <div className="mb-4">
+            <p className="mb-2 text-sm font-medium text-gray-900">Arka Plan</p>
+            <div className="grid grid-cols-3 gap-2 rounded-lg bg-gray-50 p-1">
+              {([
+                { key: 'default', label: 'Varsayılan' },
+                { key: 'gradient-blue', label: 'Mavi' },
+                { key: 'gradient-green', label: 'Yeşil' },
+                { key: 'gradient-purple', label: 'Mor' },
+                { key: 'pattern-dots', label: 'Desen' },
+              ] as const).map((option) => (
+                <button
+                  key={option.key}
+                  type="button"
+                  onClick={() => setBackground(option.key)}
+                  className={`rounded-md px-3 py-2 text-xs font-semibold transition ${
+                    background === option.key ? 'bg-white text-turtle-800 shadow-sm' : 'text-gray-500 hover:text-gray-800'
+                  }`}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="mb-4">
+            <p className="mb-2 text-sm font-medium text-gray-900">Video Efekti</p>
+            <div className="grid grid-cols-3 gap-2 rounded-lg bg-gray-50 p-1">
+              {([
+                { key: 'none', label: 'Yok' },
+                { key: 'blur', label: 'Bulanık' },
+                { key: 'grayscale', label: 'S/B' },
+                { key: 'sepia', label: 'Sepya' },
+                { key: 'brightness', label: 'Parlak' },
+              ] as const).map((option) => (
+                <button
+                  key={option.key}
+                  type="button"
+                  onClick={() => setVideoFilter(option.key)}
+                  className={`rounded-md px-3 py-2 text-xs font-semibold transition ${
+                    videoFilter === option.key ? 'bg-white text-turtle-800 shadow-sm' : 'text-gray-500 hover:text-gray-800'
+                  }`}
+                >
+                  {option.label}
+                </button>
+              ))}
             </div>
           </div>
 

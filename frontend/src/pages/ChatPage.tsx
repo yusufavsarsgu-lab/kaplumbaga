@@ -20,6 +20,7 @@ const ChatPage: React.FC = () => {
   const token = useAuthStore((state) => state.token);
   const logout = useAuthStore((state) => state.logout);
   const typingIndicatorEnabled = useSettingsStore((state) => state.typingIndicatorEnabled);
+  const background = useSettingsStore((state) => state.background);
   const navigate = useNavigate();
   const { t } = useI18n();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -184,7 +185,14 @@ const ChatPage: React.FC = () => {
   };
 
   return (
-    <div className="flex h-[100dvh] flex-col overflow-hidden bg-cream-50">
+    <div className={`flex h-[100dvh] flex-col overflow-hidden ${
+      background === 'default' ? 'bg-cream-50' :
+      background === 'gradient-blue' ? 'bg-gradient-to-br from-blue-50 to-indigo-100' :
+      background === 'gradient-green' ? 'bg-gradient-to-br from-green-50 to-emerald-100' :
+      background === 'gradient-purple' ? 'bg-gradient-to-br from-purple-50 to-pink-100' :
+      background === 'pattern-dots' ? 'bg-cream-50' :
+      'bg-cream-50'
+    }`}>
       {selectedImage && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4"

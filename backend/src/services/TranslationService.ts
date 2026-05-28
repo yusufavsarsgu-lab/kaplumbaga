@@ -249,7 +249,6 @@ class LibreTranslateTranslationService implements Translator {
 class FreeTranslationService implements Translator {
   private readonly local = new LocalTranslationService(dictionary);
   private readonly mymemory = new MyMemoryTranslationService();
-  private readonly libre = new LibreTranslateTranslationService();
 
   async translate(text: string, sourceLang: Lang, targetLang: Lang): Promise<TranslationOutcome> {
     const trimmed = text.trim();
@@ -264,25 +263,19 @@ class FreeTranslationService implements Translator {
       };
     }
 
-    // 1. Local dictionary (hızlı, offline)
-    const localResult = await this.local.translate(text, sourceLang, targetLang);
-    if (localResult.status === 'translated') {
-      return localResult;
-    }
-
-    // 2. MyMemory API
+    // 1. MyMemory API (ücretsiz, ~5000 karakter/gün limiti)
     const mymemoryResult = await this.mymemory.translate(text, sourceLang, targetLang);
     if (mymemoryResult.status === 'translated') {
       return mymemoryResult;
     }
 
-    // 3. LibreTranslate API
-    const libreResult = await this.libre.translate(text, sourceLang, targetLang);
-    if (libreResult.status === 'translated') {
-      return libreResult;
+    // 2. Local dictionary (hızlı, offline - sadece bilinen kelimeler)
+    const localResult = await this.local.translate(text, sourceLang, targetLang);
+    if (localResult.status === 'translated') {
+      return localResult;
     }
 
-    // 4. Fallback
+    // 3. Fallback: orijinal mesajı gönder
     return {
       originalText: text,
       translatedText: text,

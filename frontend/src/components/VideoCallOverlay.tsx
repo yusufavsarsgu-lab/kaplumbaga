@@ -10,6 +10,7 @@ import {
 import { useI18n } from '../i18n';
 import { useAuthStore } from '../store/authStore';
 import { useCallStore } from '../store/callStore';
+import { useSettingsStore } from '../store/settingsStore';
 import { socket } from '../services/socket';
 import { getIceServers } from '../services/webrtc';
 
@@ -65,6 +66,7 @@ const VideoCallOverlay: React.FC = () => {
   const endedRef = useRef(false);
   const pendingCandidatesRef = useRef<RTCIceCandidateInit[]>([]);
   const timeoutRef = useRef<number | null>(null);
+  const videoFilter = useSettingsStore((state) => state.videoFilter);
 
   const [micOn, setMicOn] = useState(true);
   const [camOn, setCamOn] = useState(true);
@@ -158,7 +160,7 @@ const VideoCallOverlay: React.FC = () => {
     async function startAsCaller() {
       try {
         console.log('[WebRTC] Caller: getting user media...');
-        const localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        const localStream = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 640 }, height: { ideal: 480 } }, audio: true });
         if (!active) { localStream.getTracks().forEach((tr) => tr.stop()); return; }
         console.log('[WebRTC] Caller: got media stream');
 
@@ -187,7 +189,7 @@ const VideoCallOverlay: React.FC = () => {
       if (!currentOffer) return;
       try {
         console.log('[WebRTC] Answerer: getting user media...');
-        const localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        const localStream = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 640 }, height: { ideal: 480 } }, audio: true });
         if (!active) { localStream.getTracks().forEach((tr) => tr.stop()); return; }
         console.log('[WebRTC] Answerer: got media stream');
 
@@ -371,6 +373,7 @@ const VideoCallOverlay: React.FC = () => {
           autoPlay
           playsInline
           className="absolute inset-0 h-full w-full object-cover"
+          style={{ filter: videoFilter === 'none' ? undefined : videoFilter === 'blur' ? 'blur(4px)' : videoFilter === 'grayscale' ? 'grayscale(100%)' : videoFilter === 'sepia' ? 'sepia(100%)' : videoFilter === 'brightness' ? 'brightness(1.5)' : undefined }}
         />
 
         {callStatus !== 'in-call' && (
