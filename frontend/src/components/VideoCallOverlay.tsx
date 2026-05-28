@@ -128,9 +128,10 @@ const VideoCallOverlay: React.FC = () => {
       };
 
       pc.onconnectionstatechange = () => {
+        console.log('[WebRTC] connectionState:', pc.connectionState, 'iceConnectionState:', pc.iceConnectionState);
         if (pc.connectionState === 'connected') {
           setCallStatus('in-call');
-        } else if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') {
+        } else if (pc.connectionState === 'failed') {
           setErrorMsg(t('callFailed'));
           setCallStatus('error');
         }
@@ -238,13 +239,13 @@ const VideoCallOverlay: React.FC = () => {
     socket.on('ice_candidate', onIceCandidate);
     socket.on('call_ended', onCallEnded);
 
-    // 15 saniye içinde bağlanamazsa timeout
+    // 30 saniye içinde bağlanamazsa timeout (TURN relay zaman alabilir)
     timeoutRef.current = window.setTimeout(() => {
       if (callStatusRef.current === 'connecting' && !endedRef.current) {
         setErrorMsg(t('callFailed'));
         setCallStatus('error');
       }
-    }, 15000);
+    }, 30000);
 
     if (isAnswerer) {
       startAsAnswerer();
