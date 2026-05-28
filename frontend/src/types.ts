@@ -27,6 +27,9 @@ export interface ChatMessage {
   provider?: TranslationProvider;
   deliveryStatus?: DeliveryStatus;
   isDeleted?: boolean;
+  replyToId?: string | null;
+  replyTo?: { id: string; text: string; type: MessageType } | null;
+  reactions?: Array<{ emoji: string; count: number; userReacted: boolean }>;
 }
 
 export interface LoginResponse {

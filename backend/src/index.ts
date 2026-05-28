@@ -44,11 +44,14 @@ interface ChatMessage {
   provider: TranslationProvider;
   deliveryStatus: DeliveryStatus;
   isDeleted: boolean;
+  replyToId?: string | null;
+  replyTo?: { id: string; text: string; type: MessageType } | null;
+  reactions?: Array<{ emoji: string; count: number; userReacted: boolean }>;
 }
 
 interface ClientToServerEvents {
   register: (user?: PublicUser) => void;
-  send_message: (payload: { text: string; from?: string; to: string; type?: MessageType }) => void;
+  send_message: (payload: { text: string; from?: string; to: string; type?: MessageType; replyToId?: string }) => void;
   mark_read: (data: { messageIds: string[]; readBy?: string }) => void;
   delete_message: (data: { messageId: string; to: string }) => void;
   typing: (data: { from?: string; to: string }) => void;
@@ -61,6 +64,9 @@ interface ClientToServerEvents {
   create_story: (data: { mediaData: string; type?: string; caption?: string }) => void;
   get_stories: () => void;
   view_story: (data: { storyId: string }) => void;
+  add_reaction: (data: { messageId: string; emoji: string }) => void;
+  remove_reaction: (data: { messageId: string; emoji: string }) => void;
+  get_call_logs: () => void;
 }
 
 interface ServerToClientEvents {
@@ -80,6 +86,8 @@ interface ServerToClientEvents {
   app_error: (error: { message: string }) => void;
   stories_update: (stories: Array<{ id: string; userId: string; mediaData: string; type: string; caption?: string | null; createdAt: string; viewed: boolean }>) => void;
   show_notification: (data: { title: string; body: string; data?: Record<string, string> }) => void;
+  message_reactions: (data: { messageId: string; reactions: Array<{ emoji: string; count: number; userReacted: boolean }> }) => void;
+  call_logs_update: (logs: Array<{ id: string; callerId: string; receiverId: string; status: string; startedAt: string; endedAt?: string | null; callType?: string }>) => void;
 }
 
 interface InterServerEvents {
@@ -195,12 +203,20 @@ function toChatMessage(message: {
   imageUrl: string | null;
   deliveryStatus: string;
   isDeleted?: boolean;
+  replyToId?: string | null;
+  replyTo?: { id: string; originalText: string | null; translatedText: string | null; type: string; imageData: string | null; imageUrl: string | null } | null;
   createdAt: Date;
 }): ChatMessage {
   const type = toMessageType(message.type);
   const originalText = type === 'image' || type === 'audio' || type === 'file' ? message.imageData || message.imageUrl || '' : message.originalText || '';
   const translatedText = type === 'image' || type === 'audio' || type === 'file' ? originalText : message.translatedText || originalText;
   const provider = (message.translationProvider || 'fallback') as TranslationProvider;
+
+  const replyToText = message.replyTo
+    ? (toMessageType(message.replyTo.type) === 'image' || toMessageType(message.replyTo.type) === 'audio' || toMessageType(message.replyTo.type) === 'file'
+        ? (message.replyTo.imageData || message.replyTo.imageUrl || '')
+        : (message.replyTo.translatedText || message.replyTo.originalText || ''))
+    : '';
 
   return {
     id: message.id,
@@ -217,7 +233,25 @@ function toChatMessage(message: {
     provider,
     deliveryStatus: toDeliveryStatus(message.deliveryStatus),
     isDeleted: message.isDeleted || false,
+    replyToId: message.replyToId || null,
+    replyTo: message.replyTo
+      ? { id: message.replyTo.id, text: replyToText, type: toMessageType(message.replyTo.type) }
+      : null,
   };
+}
+
+function aggregateReactions(
+  reactions: Array<{ emoji: string; userId: string }>,
+  currentUserId: string
+): Array<{ emoji: string; count: number; userReacted: boolean }> {
+  const map = new Map<string, { count: number; userReacted: boolean }>();
+  for (const r of reactions) {
+    const existing = map.get(r.emoji) || { count: 0, userReacted: false };
+    existing.count++;
+    if (r.userId === currentUserId) existing.userReacted = true;
+    map.set(r.emoji, existing);
+  }
+  return Array.from(map.entries()).map(([emoji, data]) => ({ emoji, count: data.count, userReacted: data.userReacted }));
 }
 
 async function getPublicUser(id: string): Promise<PublicUser | null> {
@@ -391,6 +425,7 @@ io.on('connection', async (socket) => {
           targetLang: translation.targetLang,
           translationStatus: translation.status,
           imageData: type === 'image' || type === 'audio' || type === 'file' ? rawText : null,
+          replyToId: payload.replyToId || null,
           deliveryStatus,
         },
       });
@@ -577,6 +612,57 @@ io.on('connection', async (socket) => {
       }
     } catch (err) {
       console.error('[socket] view_story failed', err);
+    }
+  });
+
+  socket.on('add_reaction', async (data) => {
+    try {
+      await prisma.reaction.create({
+        data: { messageId: data.messageId, userId: profile.id, emoji: data.emoji },
+      });
+      const all = await prisma.reaction.findMany({ where: { messageId: data.messageId } });
+      const reactions = aggregateReactions(all, profile.id);
+      socket.emit('message_reactions', { messageId: data.messageId, reactions });
+      const message = await prisma.message.findUnique({ where: { id: data.messageId } });
+      if (message) emitToUser(message.receiverId === profile.id ? message.senderId : message.receiverId, 'message_reactions', { messageId: data.messageId, reactions });
+    } catch (err) {
+      console.error('[socket] add_reaction failed', err);
+    }
+  });
+
+  socket.on('remove_reaction', async (data) => {
+    try {
+      await prisma.reaction.deleteMany({
+        where: { messageId: data.messageId, userId: profile.id, emoji: data.emoji },
+      });
+      const all = await prisma.reaction.findMany({ where: { messageId: data.messageId } });
+      const reactions = aggregateReactions(all, profile.id);
+      socket.emit('message_reactions', { messageId: data.messageId, reactions });
+      const message = await prisma.message.findUnique({ where: { id: data.messageId } });
+      if (message) emitToUser(message.receiverId === profile.id ? message.senderId : message.receiverId, 'message_reactions', { messageId: data.messageId, reactions });
+    } catch (err) {
+      console.error('[socket] remove_reaction failed', err);
+    }
+  });
+
+  socket.on('get_call_logs', async () => {
+    try {
+      const logs = await prisma.callLog.findMany({
+        where: { OR: [{ callerId: profile.id }, { receiverId: profile.id }] },
+        orderBy: { startedAt: 'desc' },
+        take: 50,
+      });
+      socket.emit('call_logs_update', logs.map((l) => ({
+        id: l.id,
+        callerId: l.callerId,
+        receiverId: l.receiverId,
+        status: l.status,
+        startedAt: l.startedAt.toISOString(),
+        endedAt: l.endedAt?.toISOString() || null,
+        callType: l.callType || 'video',
+      })));
+    } catch (err) {
+      console.error('[socket] get_call_logs failed', err);
     }
   });
 

@@ -40,11 +40,15 @@ model Message {
   imageUrl          String?
   deliveryStatus    String            @default("sent")
   isDeleted         Boolean           @default(false)
+  replyToId         String?
   createdAt         DateTime          @default(now())
   updatedAt         DateTime          @updatedAt
 
   sender   User @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
   receiver User @relation("ReceivedMessages", fields: [receiverId], references: [id], onDelete: Cascade)
+  replyTo  Message? @relation("MessageReplies", fields: [replyToId], references: [id], onDelete: SetNull)
+  replies  Message[] @relation("MessageReplies")
+  reactions Reaction[]
 
   @@index([senderId, receiverId, createdAt])
   @@index([receiverId, deliveryStatus])
@@ -55,6 +59,7 @@ model CallLog {
   callerId   String
   receiverId String
   status     String
+  callType   String     @default("video")
   startedAt  DateTime   @default(now())
   endedAt    DateTime?
 
@@ -73,4 +78,17 @@ model Story {
   createdAt DateTime @default(now())
   viewedBy  String?
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Reaction {
+  id        String   @id @default(cuid())
+  messageId String
+  userId    String
+  emoji     String
+  createdAt DateTime @default(now())
+
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, userId, emoji])
+  @@index([messageId])
 }

@@ -37,6 +37,9 @@ const ChatPage: React.FC = () => {
   const [appError, setAppError] = useState('');
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [viewingStoryId, setViewingStoryId] = useState<string | null>(null);
+  const [replyTo, setReplyTo] = useState<ChatMessage | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isSearching, setIsSearching] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const typingTimeoutRef = useRef<number | null>(null);
 
@@ -88,6 +91,12 @@ const ChatPage: React.FC = () => {
       );
     };
 
+    const onMessageReactions = (data: { messageId: string; reactions: Array<{ emoji: string; count: number; userReacted: boolean }> }) => {
+      setMessages((prev) =>
+        prev.map((m) => (m.id === data.messageId ? { ...m, reactions: data.reactions } : m))
+      );
+    };
+
     const onTyping = (data: { from: string; to: string }) => {
       if (!typingIndicatorEnabled || data.from !== otherUser.id || data.to !== user.id) return;
       setTyping(true);
@@ -129,6 +138,7 @@ const ChatPage: React.FC = () => {
     socket.on('app_error', onAppError);
     socket.on('messages_status_updated', onStatusUpdated);
     socket.on('message_deleted', onMessageDeleted);
+    socket.on('message_reactions', onMessageReactions);
     socket.on('stories_update', setStories);
 
     connectSocket(token);
@@ -145,6 +155,7 @@ const ChatPage: React.FC = () => {
       socket.off('app_error', onAppError);
       socket.off('messages_status_updated', onStatusUpdated);
       socket.off('message_deleted', onMessageDeleted);
+      socket.off('message_reactions', onMessageReactions);
       socket.off('stories_update', setStories);
 
       if (typingTimeoutRef.current) {
@@ -190,7 +201,9 @@ const ChatPage: React.FC = () => {
       text: value,
       to: otherUser.id,
       type,
+      replyToId: replyTo?.id || undefined,
     });
+    setReplyTo(null);
   };
 
   const handleTyping = () => {
@@ -329,6 +342,7 @@ const ChatPage: React.FC = () => {
           startCall('audio');
         }}
         onSettings={() => navigate('/settings')}
+        onSearch={() => setIsSearching((s) => !s)}
         onLogout={handleLogout}
       />
 
@@ -342,6 +356,28 @@ const ChatPage: React.FC = () => {
         </button>
       )}
 
+      {isSearching && (
+        <div className="border-b border-gray-100 bg-white px-3 py-2">
+          <div className="mx-auto flex max-w-3xl items-center gap-2">
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder={t('searchMessages')}
+              className="flex-1 rounded-lg border border-gray-200 px-3 py-1.5 text-sm focus:border-turtle-500 focus:outline-none focus:ring-1 focus:ring-turtle-500"
+              autoFocus
+            />
+            <button
+              type="button"
+              onClick={() => { setIsSearching(false); setSearchQuery(''); }}
+              className="rounded-full p-1.5 text-gray-500 hover:bg-gray-100"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      )}
+
       <main className="kaplumbaga-chat-bg flex-1 overflow-y-auto px-3 py-4 sm:px-5 scrollbar-thin">
         <div className="mx-auto flex min-h-full w-full max-w-3xl flex-col">
           {messages.length === 0 && (
@@ -351,9 +387,26 @@ const ChatPage: React.FC = () => {
             </div>
           )}
 
-          {messages.map((message) => (
-            <MessageBubble key={message.id} message={message} isMe={message.from === user.id} onImageClick={setSelectedImage} onDelete={handleDeleteMessage} />
-          ))}
+          {messages
+            .filter((m) => {
+              if (!searchQuery.trim()) return true;
+              const q = searchQuery.toLowerCase();
+              return (
+                m.text.toLowerCase().includes(q) ||
+                m.originalText?.toLowerCase().includes(q) ||
+                m.translatedText?.toLowerCase().includes(q)
+              );
+            })
+            .map((message) => (
+              <MessageBubble
+                key={message.id}
+                message={message}
+                isMe={message.from === user.id}
+                onImageClick={setSelectedImage}
+                onDelete={handleDeleteMessage}
+                onReply={setReplyTo}
+              />
+            ))}
 
           {typing && (
             <div className="mb-3 flex justify-start" aria-label={t('typing')}>
@@ -397,6 +450,25 @@ const ChatPage: React.FC = () => {
                 aria-label={t('send')}
               >
                 <Send className="h-4 w-4" />
+              </button>
+            </div>
+          )}
+
+          {replyTo && (
+            <div className="mb-2 flex items-center gap-2 rounded-lg border border-turtle-100 bg-turtle-50 px-3 py-2">
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-medium text-turtle-700">{t('replyingTo')}</p>
+                <p className="truncate text-xs text-gray-600">
+                  {replyTo.type === 'image' ? 'Resim' : replyTo.type === 'audio' ? 'Sesli mesaj' : replyTo.type === 'file' ? 'Dosya' : replyTo.text}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setReplyTo(null)}
+                className="rounded-full p-1 text-gray-500 hover:bg-white"
+                title={t('remove')}
+              >
+                <X className="h-3 w-3" />
               </button>
             </div>
           )}

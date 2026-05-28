@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { Check, CheckCheck, Trash2 } from 'lucide-react';
+import { Check, CheckCheck, Trash2, Reply } from 'lucide-react';
 import { useI18n } from '../i18n';
 import { useSettingsStore } from '../store/settingsStore';
+import { socket } from '../services/socket';
 import type { ChatMessage } from '../types';
 
 interface Props {
@@ -9,9 +10,10 @@ interface Props {
   isMe: boolean;
   onImageClick?: (src: string) => void;
   onDelete?: (messageId: string) => void;
+  onReply?: (message: ChatMessage) => void;
 }
 
-const MessageBubble: React.FC<Props> = ({ message, isMe, onImageClick, onDelete }) => {
+const MessageBubble: React.FC<Props> = ({ message, isMe, onImageClick, onDelete, onReply }) => {
   const [showActions, setShowActions] = useState(false);
   const showOriginal = useSettingsStore((state) => state.showOriginal);
   const showTranslation = useSettingsStore((state) => state.showTranslation);
@@ -44,12 +46,21 @@ const MessageBubble: React.FC<Props> = ({ message, isMe, onImageClick, onDelete 
     );
   }
 
+  const replyText = message.replyTo
+    ? (message.replyTo.type === 'image' ? 'Resim' : message.replyTo.type === 'audio' ? 'Sesli mesaj' : message.replyTo.type === 'file' ? 'Dosya' : message.replyTo.text).slice(0, 40)
+    : '';
+
   return (
     <div className={`mb-3 flex ${isMe ? 'justify-end' : 'justify-start'}`}>
       <div
         className={`relative max-w-[86%] break-words sm:max-w-[72%] ${isMe ? 'bubble-sent' : 'bubble-received'}`}
         onContextMenu={(e) => { e.preventDefault(); if (isMe) setShowActions(true); }}
       >
+        {message.replyTo && (
+          <div className={`mb-1 rounded border-l-2 px-2 py-1 text-xs ${isMe ? 'border-green-100/50 bg-green-100/20 text-green-50' : 'border-turtle-200 bg-turtle-50 text-gray-500'}`}>
+            <span className="font-semibold">{t('replyingTo')}:</span> {replyText}
+          </div>
+        )}
         {message.type === 'image' ? (
           <img
             src={message.originalText}
@@ -61,13 +72,20 @@ const MessageBubble: React.FC<Props> = ({ message, isMe, onImageClick, onDelete 
         ) : message.type === 'audio' ? (
           <audio controls className="max-w-[200px] sm:max-w-[260px]" src={message.originalText} />
         ) : message.type === 'file' ? (
-          <a
-            href={message.originalText}
-            download
+          <button
+            type="button"
+            onClick={() => {
+              const link = document.createElement('a');
+              link.href = message.originalText;
+              link.download = 'dosya';
+              document.body.appendChild(link);
+              link.click();
+              document.body.removeChild(link);
+            }}
             className="flex items-center gap-2 rounded-lg bg-white/10 px-3 py-2 text-sm text-white hover:bg-white/20"
           >
             <span className="truncate">{t('downloadFile')}</span>
-          </a>
+          </button>
         ) : (
           <p className="whitespace-pre-wrap text-[15px] leading-relaxed">{primaryText}</p>
         )}
@@ -107,8 +125,48 @@ const MessageBubble: React.FC<Props> = ({ message, isMe, onImageClick, onDelete 
           )}
         </span>
 
+        {message.reactions && message.reactions.length > 0 && (
+          <div className="mt-1 flex flex-wrap gap-1">
+            {message.reactions.map((r) => (
+              <button
+                key={r.emoji}
+                type="button"
+                onClick={() => socket.emit(r.userReacted ? 'remove_reaction' : 'add_reaction', { messageId: message.id, emoji: r.emoji })}
+                className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-xs transition ${
+                  r.userReacted
+                    ? 'bg-turtle-100 text-turtle-800 border border-turtle-300'
+                    : 'bg-gray-100 text-gray-600 border border-gray-200'
+                }`}
+              >
+                <span>{r.emoji}</span>
+                <span className="text-[10px] font-medium">{r.count}</span>
+              </button>
+            ))}
+            <button
+              type="button"
+              onClick={() => {
+                const emojis = ['❤️', '👍', '😂', '😮', '😢', '🙏'];
+                const current = message.reactions?.map((r) => r.emoji) || [];
+                const next = emojis.find((e) => !current.includes(e));
+                if (next) socket.emit('add_reaction', { messageId: message.id, emoji: next });
+              }}
+              className="flex h-6 w-6 items-center justify-center rounded-full bg-gray-100 text-xs text-gray-500 transition hover:bg-gray-200"
+              title={t('addReaction')}
+            >
+              +
+            </button>
+          </div>
+        )}
+
         {showActions && (
           <div className="absolute -top-8 right-0 z-10 flex items-center gap-1 rounded-lg bg-white p-1 shadow-lg">
+            <button
+              type="button"
+              onClick={() => { onReply?.(message); setShowActions(false); }}
+              className="flex items-center gap-1 rounded px-2 py-1 text-xs text-turtle-700 hover:bg-turtle-50"
+            >
+              <Reply className="h-3 w-3" /> {t('reply')}
+            </button>
             <button
               type="button"
               onClick={() => { onDelete?.(message.id); setShowActions(false); }}
