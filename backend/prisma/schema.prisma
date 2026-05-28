@@ -15,6 +15,7 @@ model User {
   language     String
   avatarUrl    String?
   lastSeen     DateTime  @default(now())
+  fcmToken     String?
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 

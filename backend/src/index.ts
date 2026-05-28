@@ -7,6 +7,7 @@ import authRoutes from './routes/auth';
 import { prisma } from './db/prisma';
 import { getBearerToken, verifyAuthToken } from './services/AuthService';
 import { translateText, translateLongText, type TranslationProvider } from './services/TranslationService';
+import { saveFcmToken, sendPushNotification } from './services/PushNotificationService';
 
 const app = express();
 const httpServer = createServer(app);
@@ -56,6 +57,7 @@ interface ClientToServerEvents {
   call_rejected: (data: { to: string }) => void;
   ice_candidate: (data: { to: string; candidate: unknown }) => void;
   end_call: (data: { to: string }) => void;
+  register_fcm_token: (data: { token: string }) => void;
 }
 
 interface ServerToClientEvents {
@@ -309,6 +311,15 @@ io.on('connection', async (socket) => {
     socket.emit('chat_history', await getConversationMessages(profile.id));
   });
 
+  socket.on('register_fcm_token', async (data) => {
+    try {
+      await saveFcmToken(profile.id, data.token);
+      console.log('[Push] FCM token registered for user', profile.id);
+    } catch (err) {
+      console.error('[Push] FCM token registration failed:', err);
+    }
+  });
+
   socket.on('send_message', async (payload) => {
     try {
       const sender = await prisma.user.findUnique({ where: { id: profile.id } });
@@ -372,6 +383,17 @@ io.on('connection', async (socket) => {
       chatMessage.provider = (type === 'image' || type === 'audio' ? 'local' : translation.provider) as TranslationProvider;
       socket.emit('receive_message', chatMessage);
       emitToUser(receiver.id, 'receive_message', chatMessage);
+
+      // Push bildirim gönder (kullanıcı çevrimdışıysa)
+      if (!onlineUsers.has(receiver.id)) {
+        const pushTitle = sender.displayName;
+        const pushBody = type === 'image' ? 'Resim gönderdi' : type === 'audio' ? 'Sesli mesaj gönderdi' : (chatMessage.originalText || 'Yeni mesaj');
+        void sendPushNotification(receiver.id, pushTitle, pushBody, {
+          messageId: chatMessage.id,
+          senderId: sender.id,
+          type,
+        });
+      }
     } catch (error) {
       console.error('[socket] send_message failed', error);
       socket.emit('app_error', { message: 'message_send_failed' });

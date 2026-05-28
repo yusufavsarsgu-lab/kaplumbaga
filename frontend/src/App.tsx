@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { App as CapApp } from '@capacitor/app';
+import { initPushNotifications } from './services/pushNotifications';
 import LoginPage from './pages/LoginPage';
 import ChatPage from './pages/ChatPage';
 import SettingsPage from './pages/SettingsPage';
@@ -16,6 +17,10 @@ function AppRoutes() {
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
   }, [theme]);
+
+  useEffect(() => {
+    void initPushNotifications();
+  }, []);
 
   useEffect(() => {
     const setupBackButton = async () => {
