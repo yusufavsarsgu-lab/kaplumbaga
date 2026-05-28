@@ -49,6 +49,7 @@ export const tr: TranslationBundle = {
     sendImage: 'Resim gönder',
     quickMessages: 'Hızlı mesajlar',
     videoCall: 'Görüntülü ara',
+    voiceCall: 'Sesli ara',
     settings: 'Ayarlar',
     original: 'Orijinal',
     translation: 'Çeviri',

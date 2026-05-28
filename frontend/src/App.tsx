@@ -31,8 +31,8 @@ function AppRoutes() {
   }, []);
 
   useEffect(() => {
-    const onIncomingCall = (data: { from: string; offer: unknown }) => {
-      setIncomingCall({ from: data.from, offer: data.offer as RTCSessionDescriptionInit });
+    const onIncomingCall = (data: { from: string; offer: unknown; callType?: 'video' | 'audio' }) => {
+      setIncomingCall({ from: data.from, offer: data.offer as RTCSessionDescriptionInit, callType: data.callType || 'video' });
       navigate('/chat');
     };
     const onCallEnded = () => {

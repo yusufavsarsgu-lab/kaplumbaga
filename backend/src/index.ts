@@ -51,7 +51,7 @@ interface ClientToServerEvents {
   mark_read: (data: { messageIds: string[]; readBy?: string }) => void;
   delete_message: (data: { messageId: string; to: string }) => void;
   typing: (data: { from?: string; to: string }) => void;
-  call_offer: (data: { from?: string; to: string; offer: unknown }) => void;
+  call_offer: (data: { from?: string; to: string; offer: unknown; callType?: 'video' | 'audio' }) => void;
   call_answer: (data: { to: string; answer: unknown }) => void;
   call_rejected: (data: { to: string }) => void;
   ice_candidate: (data: { to: string; candidate: unknown }) => void;
@@ -67,7 +67,7 @@ interface ServerToClientEvents {
   typing: (data: { from: string; to: string }) => void;
   messages_status_updated: (data: { messageIds: string[]; status: DeliveryStatus }) => void;
   message_deleted: (data: { messageId: string }) => void;
-  incoming_call: (data: { from: string; offer: unknown }) => void;
+  incoming_call: (data: { from: string; offer: unknown; callType?: 'video' | 'audio' }) => void;
   call_accepted: (data: { answer: unknown }) => void;
   call_rejected: () => void;
   ice_candidate: (data: { candidate: unknown }) => void;
@@ -436,7 +436,7 @@ io.on('connection', async (socket) => {
         status: 'ringing',
       },
     });
-    emitToUser(data.to, 'incoming_call', { from: profile.id, offer: data.offer });
+    emitToUser(data.to, 'incoming_call', { from: profile.id, offer: data.offer, callType: data.callType || 'video' });
   });
 
   socket.on('call_answer', async (data) => {

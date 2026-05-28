@@ -49,6 +49,7 @@ export const th: TranslationBundle = {
     sendImage: 'ส่งรูปภาพ',
     quickMessages: 'ข้อความด่วน',
     videoCall: 'วิดีโอคอล',
+    voiceCall: 'โทรศัพท์',
     settings: 'การตั้งค่า',
     original: 'ต้นฉบับ',
     translation: 'คำแปล',

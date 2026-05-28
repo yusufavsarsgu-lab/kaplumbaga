@@ -55,6 +55,7 @@ const VideoCallOverlay: React.FC = () => {
   const currentOffer = useCallStore((state) => state.currentOffer);
   const isInCall = useCallStore((state) => state.isInCall);
   const callMode = useCallStore((state) => state.callMode);
+  const callType = useCallStore((state) => state.callType);
   const endCallState = useCallStore((state) => state.endCallState);
   const toggleMode = useCallStore((state) => state.toggleMode);
   const { t } = useI18n();
@@ -160,16 +161,16 @@ const VideoCallOverlay: React.FC = () => {
     async function startAsCaller() {
       try {
         console.log('[WebRTC] Caller: getting user media...');
-        const localStream = await navigator.mediaDevices.getUserMedia({
-          video: { width: { ideal: 640 }, height: { ideal: 480 } },
-          audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
-        });
+        const constraints = callType === 'audio'
+          ? { audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } }
+          : { video: { width: { ideal: 640 }, height: { ideal: 480 } }, audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } };
+        const localStream = await navigator.mediaDevices.getUserMedia(constraints as MediaStreamConstraints);
         if (!active) { localStream.getTracks().forEach((tr) => tr.stop()); return; }
         console.log('[WebRTC] Caller: got media stream');
 
         localStreamRef.current = localStream;
         setStreamReady(true);
-        if (localVideoRef.current) localVideoRef.current.srcObject = localStream;
+        if (localVideoRef.current && callType === 'video') localVideoRef.current.srcObject = localStream;
 
         const pc = createPeerConnection(localStream);
         const offer = await pc.createOffer();
@@ -192,16 +193,16 @@ const VideoCallOverlay: React.FC = () => {
       if (!currentOffer) return;
       try {
         console.log('[WebRTC] Answerer: getting user media...');
-        const localStream = await navigator.mediaDevices.getUserMedia({
-          video: { width: { ideal: 640 }, height: { ideal: 480 } },
-          audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
-        });
+        const constraints = callType === 'audio'
+          ? { audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } }
+          : { video: { width: { ideal: 640 }, height: { ideal: 480 } }, audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } };
+        const localStream = await navigator.mediaDevices.getUserMedia(constraints as MediaStreamConstraints);
         if (!active) { localStream.getTracks().forEach((tr) => tr.stop()); return; }
         console.log('[WebRTC] Answerer: got media stream');
 
         localStreamRef.current = localStream;
         setStreamReady(true);
-        if (localVideoRef.current) localVideoRef.current.srcObject = localStream;
+        if (localVideoRef.current && callType === 'video') localVideoRef.current.srcObject = localStream;
 
         const pc = createPeerConnection(localStream);
         console.log('[WebRTC] Answerer: setting remote desc...');
@@ -387,15 +388,32 @@ const VideoCallOverlay: React.FC = () => {
 
       {/* Video area — always rendered so refs stay alive */}
       <div className={`relative bg-gray-900 ${isMini ? 'h-full w-full' : 'flex-1'}`}>
-        <video
-          ref={remoteVideoRef}
-          autoPlay
-          playsInline
-          className="absolute inset-0 h-full w-full object-cover"
-          style={{ filter: videoFilter === 'none' ? undefined : videoFilter === 'blur' ? 'blur(4px)' : videoFilter === 'grayscale' ? 'grayscale(100%)' : videoFilter === 'sepia' ? 'sepia(100%)' : videoFilter === 'brightness' ? 'brightness(1.5)' : undefined }}
-        />
+        {callType === 'video' && (
+          <video
+            ref={remoteVideoRef}
+            autoPlay
+            playsInline
+            className="absolute inset-0 h-full w-full object-cover"
+            style={{ filter: videoFilter === 'none' ? undefined : videoFilter === 'blur' ? 'blur(4px)' : videoFilter === 'grayscale' ? 'grayscale(100%)' : videoFilter === 'sepia' ? 'sepia(100%)' : videoFilter === 'brightness' ? 'brightness(1.5)' : undefined }}
+          />
+        )}
 
-        {callStatus !== 'in-call' && (
+        {callType === 'audio' && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center">
+            <div className={`flex items-center justify-center rounded-full bg-gray-800 font-bold text-gray-400 ${
+              isMini ? 'h-10 w-10 text-lg' : 'h-20 w-20 text-2xl'
+            }`}>
+              {otherUser?.avatar || '?'}
+            </div>
+            {!isMini && (
+              <p className="mt-2 text-xs text-gray-400">
+                {callStatus === 'connecting' ? t('connecting') : callStatus === 'in-call' ? t('inCall') : errorMsg}
+              </p>
+            )}
+          </div>
+        )}
+
+        {callStatus !== 'in-call' && callType === 'video' && (
           <div className="absolute inset-0 flex flex-col items-center justify-center bg-gray-900/80">
             <div className={`flex items-center justify-center rounded-full bg-gray-800 font-bold text-gray-400 ${
               isMini ? 'h-10 w-10 text-lg' : 'h-20 w-20 text-2xl'
@@ -411,18 +429,20 @@ const VideoCallOverlay: React.FC = () => {
         )}
 
         {/* Local video PiP */}
-        <div className={`absolute overflow-hidden border border-white/20 bg-black ${
-          isMini
-            ? 'bottom-1 left-1 h-10 w-8 rounded-md'
-            : 'bottom-2 right-2 h-24 w-[4.5rem] rounded-lg shadow-lg sm:h-28 sm:w-20'
-        }`}>
-          <video ref={localVideoRef} autoPlay playsInline muted className="h-full w-full object-cover" />
-          {!camOn && !isMini && (
-            <div className="absolute inset-0 flex items-center justify-center bg-black/70">
-              <CameraOff className="h-4 w-4 text-gray-400" />
-            </div>
-          )}
-        </div>
+        {callType === 'video' && (
+          <div className={`absolute overflow-hidden border border-white/20 bg-black ${
+            isMini
+              ? 'bottom-1 left-1 h-10 w-8 rounded-md'
+              : 'bottom-2 right-2 h-24 w-[4.5rem] rounded-lg shadow-lg sm:h-28 sm:w-20'
+          }`}>
+            <video ref={localVideoRef} autoPlay playsInline muted className="h-full w-full object-cover" />
+            {!camOn && !isMini && (
+              <div className="absolute inset-0 flex items-center justify-center bg-black/70">
+                <CameraOff className="h-4 w-4 text-gray-400" />
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Mini mode badge */}
         {isMini && (
@@ -447,17 +467,19 @@ const VideoCallOverlay: React.FC = () => {
             {micOn ? <Mic className="h-4 w-4" /> : <MicOff className="h-4 w-4" />}
           </button>
 
-          <button
-            type="button"
-            onClick={toggleCam}
-            disabled={!streamReady}
-            className={`rounded-full p-3 text-white transition disabled:opacity-40 ${
-              camOn ? 'bg-white/15 hover:bg-white/25' : 'bg-red-600 hover:bg-red-700'
-            }`}
-            title={camOn ? t('cameraOff') : t('cameraOn')}
-          >
-            {camOn ? <Video className="h-4 w-4" /> : <CameraOff className="h-4 w-4" />}
-          </button>
+          {callType === 'video' && (
+            <button
+              type="button"
+              onClick={toggleCam}
+              disabled={!streamReady}
+              className={`rounded-full p-3 text-white transition disabled:opacity-40 ${
+                camOn ? 'bg-white/15 hover:bg-white/25' : 'bg-red-600 hover:bg-red-700'
+              }`}
+              title={camOn ? t('cameraOff') : t('cameraOn')}
+            >
+              {camOn ? <Video className="h-4 w-4" /> : <CameraOff className="h-4 w-4" />}
+            </button>
+          )}
 
           <button
             type="button"

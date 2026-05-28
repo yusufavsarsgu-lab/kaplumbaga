@@ -1,5 +1,5 @@
 import React from 'react';
-import { LogOut, Settings, Video } from 'lucide-react';
+import { LogOut, Settings, Video, Phone } from 'lucide-react';
 import { useI18n } from '../i18n';
 import TurtleLogo from './TurtleLogo';
 import LanguageBadge from './LanguageBadge';
@@ -12,6 +12,7 @@ interface Props {
   selfLang: Language;
   online?: boolean;
   onVideoCall?: () => void;
+  onVoiceCall?: () => void;
   onSettings?: () => void;
   onLogout?: () => void;
 }
@@ -23,6 +24,7 @@ const UserHeader: React.FC<Props> = ({
   selfLang,
   online,
   onVideoCall,
+  onVoiceCall,
   onSettings,
   onLogout,
 }) => {
@@ -51,6 +53,17 @@ const UserHeader: React.FC<Props> = ({
       </div>
 
       <div className="flex flex-shrink-0 items-center gap-1">
+        {onVoiceCall && (
+          <button
+            type="button"
+            onClick={onVoiceCall}
+            className="rounded-full p-2 transition hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-white/40"
+            title={t('voiceCall')}
+            aria-label={t('voiceCall')}
+          >
+            <Phone className="h-5 w-5" />
+          </button>
+        )}
         {onVideoCall && (
           <button
             type="button"

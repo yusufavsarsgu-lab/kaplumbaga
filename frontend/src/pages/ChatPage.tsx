@@ -277,7 +277,15 @@ const ChatPage: React.FC = () => {
             setAppError(t('userOffline'));
             return;
           }
-          startCall();
+          startCall('video');
+        }}
+        onVoiceCall={() => {
+          if (isInCall) return;
+          if (!otherOnline) {
+            setAppError(t('userOffline'));
+            return;
+          }
+          startCall('audio');
         }}
         onSettings={() => navigate('/settings')}
         onLogout={handleLogout}
