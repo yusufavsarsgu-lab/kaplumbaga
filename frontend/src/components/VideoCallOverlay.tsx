@@ -13,19 +13,28 @@ import { useCallStore } from '../store/callStore';
 import { socket } from '../services/socket';
 import { getIceServers } from '../services/webrtc';
 
-function waitForIceGatheringComplete(pc: RTCPeerConnection): Promise<void> {
+function waitForIceGatheringComplete(pc: RTCPeerConnection, maxMs = 3000): Promise<void> {
   return new Promise((resolve) => {
     if (pc.iceGatheringState === 'complete') {
       resolve();
       return;
     }
+    let resolved = false;
     const checkState = () => {
-      if (pc.iceGatheringState === 'complete') {
+      if (!resolved && pc.iceGatheringState === 'complete') {
+        resolved = true;
         pc.removeEventListener('icegatheringstatechange', checkState);
         resolve();
       }
     };
     pc.addEventListener('icegatheringstatechange', checkState);
+    setTimeout(() => {
+      if (!resolved) {
+        resolved = true;
+        pc.removeEventListener('icegatheringstatechange', checkState);
+        resolve();
+      }
+    }, maxMs);
   });
 }
 
