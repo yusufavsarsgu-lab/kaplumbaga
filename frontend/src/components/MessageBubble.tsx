@@ -58,6 +58,8 @@ const MessageBubble: React.FC<Props> = ({ message, isMe, onImageClick, onDelete 
             loading="lazy"
             onClick={() => onImageClick?.(message.originalText)}
           />
+        ) : message.type === 'audio' ? (
+          <audio controls className="max-w-[200px] sm:max-w-[260px]" src={message.originalText} />
         ) : (
           <p className="whitespace-pre-wrap text-[15px] leading-relaxed">{primaryText}</p>
         )}

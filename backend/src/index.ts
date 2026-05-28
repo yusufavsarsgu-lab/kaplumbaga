@@ -12,7 +12,7 @@ const app = express();
 const httpServer = createServer(app);
 
 type Language = 'tr' | 'th';
-type MessageType = 'text' | 'image';
+type MessageType = 'text' | 'image' | 'audio';
 type TranslationStatus = 'translated' | 'fallback';
 type DeliveryStatus = 'sent' | 'delivered' | 'read';
 
@@ -191,8 +191,8 @@ function toChatMessage(message: {
   createdAt: Date;
 }): ChatMessage {
   const type = toMessageType(message.type);
-  const originalText = type === 'image' ? message.imageData || message.imageUrl || '' : message.originalText || '';
-  const translatedText = type === 'image' ? originalText : message.translatedText || originalText;
+  const originalText = type === 'image' || type === 'audio' ? message.imageData || message.imageUrl || '' : message.originalText || '';
+  const translatedText = type === 'image' || type === 'audio' ? originalText : message.translatedText || originalText;
   const provider = (message.translationProvider || 'fallback') as TranslationProvider;
 
   return {
@@ -331,9 +331,14 @@ io.on('connection', async (socket) => {
         return;
       }
 
+      if (type === 'audio' && (!rawText.startsWith('data:audio/') || rawText.length > 2_000_000)) {
+        socket.emit('app_error', { message: 'invalid_audio' });
+        return;
+      }
+
       const deliveryStatus: DeliveryStatus = onlineUsers.has(receiver.id) ? 'delivered' : 'sent';
       let translation;
-      if (type === 'image') {
+      if (type === 'image' || type === 'audio') {
         translation = {
           originalText: rawText,
           translatedText: rawText,
@@ -353,18 +358,18 @@ io.on('connection', async (socket) => {
           senderId: sender.id,
           receiverId: receiver.id,
           type,
-          originalText: type === 'image' ? null : translation.originalText,
-          translatedText: type === 'image' ? null : translation.translatedText,
+          originalText: type === 'image' || type === 'audio' ? null : translation.originalText,
+          translatedText: type === 'image' || type === 'audio' ? null : translation.translatedText,
           sourceLang: translation.sourceLang,
           targetLang: translation.targetLang,
           translationStatus: translation.status,
-          imageData: type === 'image' ? rawText : null,
+          imageData: type === 'image' || type === 'audio' ? rawText : null,
           deliveryStatus,
         },
       });
 
       const chatMessage = toChatMessage(created);
-      chatMessage.provider = (type === 'image' ? 'local' : translation.provider) as TranslationProvider;
+      chatMessage.provider = (type === 'image' || type === 'audio' ? 'local' : translation.provider) as TranslationProvider;
       socket.emit('receive_message', chatMessage);
       emitToUser(receiver.id, 'receive_message', chatMessage);
     } catch (error) {

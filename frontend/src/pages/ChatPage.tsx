@@ -11,6 +11,7 @@ import MessageBubble from '../components/MessageBubble';
 import ChatInput from '../components/ChatInput';
 import EmojiPicker from '../components/EmojiPicker';
 import ImageUploadButton from '../components/ImageUploadButton';
+import VoiceRecorder from '../components/VoiceRecorder';
 import VideoCallOverlay from '../components/VideoCallOverlay';
 import type { AppUser, ChatMessage, DeliveryStatus } from '../types';
 
@@ -167,7 +168,7 @@ const ChatPage: React.FC = () => {
     return <Navigate to="/" replace />;
   }
 
-  const sendMessage = (text: string, type: 'text' | 'image' = 'text') => {
+  const sendMessage = (text: string, type: 'text' | 'image' | 'audio' = 'text') => {
     const value = text.trim();
     if (!value) return;
 
@@ -354,6 +355,7 @@ const ChatPage: React.FC = () => {
           <div className="flex items-end gap-1 sm:gap-2">
             <EmojiPicker onSelect={appendToDraft} />
             <ImageUploadButton onImageSelect={setPendingImage} onError={setAppError} />
+            <VoiceRecorder onAudioRecorded={(audio) => sendMessage(audio, 'audio')} />
             <ChatInput value={draft} onChange={setDraft} onSend={sendMessage} onTyping={handleTyping} />
           </div>
         </div>
