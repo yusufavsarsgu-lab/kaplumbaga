@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Check, CheckCheck, Trash2, Reply } from 'lucide-react';
+import { Check, CheckCheck, Trash2, Reply, Volume2 } from 'lucide-react';
 import { useI18n } from '../i18n';
 import { useSettingsStore } from '../store/settingsStore';
 import { socket } from '../services/socket';
@@ -160,6 +160,20 @@ const MessageBubble: React.FC<Props> = ({ message, isMe, onImageClick, onDelete,
 
         {showActions && (
           <div className="absolute -top-8 right-0 z-10 flex items-center gap-1 rounded-lg bg-white p-1 shadow-lg">
+            {message.type === 'text' && (
+              <button
+                type="button"
+                onClick={() => {
+                  const utterance = new SpeechSynthesisUtterance(primaryText);
+                  utterance.lang = language === 'th' ? 'th-TH' : 'tr-TR';
+                  window.speechSynthesis.speak(utterance);
+                  setShowActions(false);
+                }}
+                className="flex items-center gap-1 rounded px-2 py-1 text-xs text-gray-700 hover:bg-gray-50"
+              >
+                <Volume2 className="h-3 w-3" /> {t('listen')}
+              </button>
+            )}
             <button
               type="button"
               onClick={() => { onReply?.(message); setShowActions(false); }}

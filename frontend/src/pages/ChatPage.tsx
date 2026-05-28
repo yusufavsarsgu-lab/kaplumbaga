@@ -17,6 +17,7 @@ import VoiceRecorder from '../components/VoiceRecorder';
 import VideoCallOverlay from '../components/VideoCallOverlay';
 import StoryBar from '../components/StoryBar';
 import StoryViewer from '../components/StoryViewer';
+import CallHistoryModal from '../components/CallHistoryModal';
 import type { AppUser, ChatMessage, DeliveryStatus } from '../types';
 
 const ChatPage: React.FC = () => {
@@ -40,6 +41,8 @@ const ChatPage: React.FC = () => {
   const [replyTo, setReplyTo] = useState<ChatMessage | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
+  const [callLogs, setCallLogs] = useState<Array<{ id: string; callerId: string; receiverId: string; status: string; startedAt: string; endedAt?: string | null; callType?: string }>>([]);
+  const [showCallHistory, setShowCallHistory] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const typingTimeoutRef = useRef<number | null>(null);
 
@@ -97,6 +100,10 @@ const ChatPage: React.FC = () => {
       );
     };
 
+    const onCallLogs = (logs: Array<{ id: string; callerId: string; receiverId: string; status: string; startedAt: string; endedAt?: string | null; callType?: string }>) => {
+      setCallLogs(logs);
+    };
+
     const onTyping = (data: { from: string; to: string }) => {
       if (!typingIndicatorEnabled || data.from !== otherUser.id || data.to !== user.id) return;
       setTyping(true);
@@ -139,6 +146,7 @@ const ChatPage: React.FC = () => {
     socket.on('messages_status_updated', onStatusUpdated);
     socket.on('message_deleted', onMessageDeleted);
     socket.on('message_reactions', onMessageReactions);
+    socket.on('call_logs_update', onCallLogs);
     socket.on('stories_update', setStories);
 
     connectSocket(token);
@@ -156,6 +164,7 @@ const ChatPage: React.FC = () => {
       socket.off('messages_status_updated', onStatusUpdated);
       socket.off('message_deleted', onMessageDeleted);
       socket.off('message_reactions', onMessageReactions);
+      socket.off('call_logs_update', onCallLogs);
       socket.off('stories_update', setStories);
 
       if (typingTimeoutRef.current) {
@@ -343,8 +352,18 @@ const ChatPage: React.FC = () => {
         }}
         onSettings={() => navigate('/settings')}
         onSearch={() => setIsSearching((s) => !s)}
+        onCallHistory={() => { socket.emit('get_call_logs'); setShowCallHistory(true); }}
         onLogout={handleLogout}
       />
+
+      {showCallHistory && (
+        <CallHistoryModal
+          logs={callLogs}
+          userId={user.id}
+          otherName={otherUser.displayName}
+          onClose={() => setShowCallHistory(false)}
+        />
+      )}
 
       {appError && (
         <button

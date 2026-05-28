@@ -1,5 +1,5 @@
 import React from 'react';
-import { LogOut, Settings, Video, Phone, Search } from 'lucide-react';
+import { LogOut, Settings, Video, Phone, Search, Clock } from 'lucide-react';
 import { useI18n } from '../i18n';
 import TurtleLogo from './TurtleLogo';
 import LanguageBadge from './LanguageBadge';
@@ -17,6 +17,7 @@ interface Props {
   onSettings?: () => void;
   onLogout?: () => void;
   onSearch?: () => void;
+  onCallHistory?: () => void;
 }
 
 function formatLastSeen(iso: string | null | undefined, lang: string): string {
@@ -46,6 +47,7 @@ const UserHeader: React.FC<Props> = ({
   onSettings,
   onLogout,
   onSearch,
+  onCallHistory,
 }) => {
   const { t } = useI18n();
 
@@ -108,6 +110,17 @@ const UserHeader: React.FC<Props> = ({
             aria-label={t('search')}
           >
             <Search className="h-5 w-5" />
+          </button>
+        )}
+        {onCallHistory && (
+          <button
+            type="button"
+            onClick={onCallHistory}
+            className="rounded-full p-2 transition hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-white/40"
+            title={t('callHistory')}
+            aria-label={t('callHistory')}
+          >
+            <Clock className="h-5 w-5" />
           </button>
         )}
         {onSettings && (
