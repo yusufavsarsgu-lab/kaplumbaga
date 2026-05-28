@@ -73,6 +73,14 @@ const ChatPage: React.FC = () => {
       );
     };
 
+    const onMessageDeleted = (data: { messageId: string }) => {
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === data.messageId ? { ...m, isDeleted: true, text: '', originalText: '', translatedText: '' } : m
+        )
+      );
+    };
+
     const onTyping = (data: { from: string; to: string }) => {
       if (!typingIndicatorEnabled || data.from !== otherUser.id || data.to !== user.id) return;
       setTyping(true);
@@ -108,6 +116,7 @@ const ChatPage: React.FC = () => {
     socket.on('user_offline', onUserOffline);
     socket.on('app_error', onAppError);
     socket.on('messages_status_updated', onStatusUpdated);
+    socket.on('message_deleted', onMessageDeleted);
 
     connectSocket(token);
     socket.emit('register');
@@ -121,6 +130,7 @@ const ChatPage: React.FC = () => {
       socket.off('user_offline', onUserOffline);
       socket.off('app_error', onAppError);
       socket.off('messages_status_updated', onStatusUpdated);
+      socket.off('message_deleted', onMessageDeleted);
 
       if (typingTimeoutRef.current) {
         window.clearTimeout(typingTimeoutRef.current);
@@ -139,6 +149,11 @@ const ChatPage: React.FC = () => {
 
   const acceptCall = () => {
     startCall();
+  };
+
+  const handleDeleteMessage = (messageId: string) => {
+    if (!otherUser) return;
+    socket.emit('delete_message', { messageId, to: otherUser.id });
   };
 
   const rejectCall = () => {
@@ -287,7 +302,7 @@ const ChatPage: React.FC = () => {
           )}
 
           {messages.map((message) => (
-            <MessageBubble key={message.id} message={message} isMe={message.from === user.id} onImageClick={setSelectedImage} />
+            <MessageBubble key={message.id} message={message} isMe={message.from === user.id} onImageClick={setSelectedImage} onDelete={handleDeleteMessage} />
           ))}
 
           {typing && (

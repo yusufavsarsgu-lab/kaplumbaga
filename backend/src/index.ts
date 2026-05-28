@@ -42,12 +42,14 @@ interface ChatMessage {
   status: TranslationStatus;
   provider: TranslationProvider;
   deliveryStatus: DeliveryStatus;
+  isDeleted: boolean;
 }
 
 interface ClientToServerEvents {
   register: (user?: PublicUser) => void;
   send_message: (payload: { text: string; from?: string; to: string; type?: MessageType }) => void;
   mark_read: (data: { messageIds: string[]; readBy?: string }) => void;
+  delete_message: (data: { messageId: string; to: string }) => void;
   typing: (data: { from?: string; to: string }) => void;
   call_offer: (data: { from?: string; to: string; offer: unknown }) => void;
   call_answer: (data: { to: string; answer: unknown }) => void;
@@ -64,6 +66,7 @@ interface ServerToClientEvents {
   receive_message: (message: ChatMessage) => void;
   typing: (data: { from: string; to: string }) => void;
   messages_status_updated: (data: { messageIds: string[]; status: DeliveryStatus }) => void;
+  message_deleted: (data: { messageId: string }) => void;
   incoming_call: (data: { from: string; offer: unknown }) => void;
   call_accepted: (data: { answer: unknown }) => void;
   call_rejected: () => void;
@@ -184,6 +187,7 @@ function toChatMessage(message: {
   imageData: string | null;
   imageUrl: string | null;
   deliveryStatus: string;
+  isDeleted?: boolean;
   createdAt: Date;
 }): ChatMessage {
   const type = toMessageType(message.type);
@@ -205,6 +209,7 @@ function toChatMessage(message: {
     status: toTranslationStatus(message.translationStatus),
     provider,
     deliveryStatus: toDeliveryStatus(message.deliveryStatus),
+    isDeleted: message.isDeleted || false,
   };
 }
 
@@ -365,6 +370,25 @@ io.on('connection', async (socket) => {
     } catch (error) {
       console.error('[socket] send_message failed', error);
       socket.emit('app_error', { message: 'message_send_failed' });
+    }
+  });
+
+  socket.on('delete_message', async (data) => {
+    try {
+      const message = await prisma.message.findUnique({ where: { id: data.messageId } });
+      if (!message || message.senderId !== profile.id) {
+        socket.emit('app_error', { message: 'delete_unauthorized' });
+        return;
+      }
+      await prisma.message.update({
+        where: { id: data.messageId },
+        data: { isDeleted: true, originalText: '', translatedText: '' },
+      });
+      socket.emit('message_deleted', { messageId: data.messageId });
+      emitToUser(data.to, 'message_deleted', { messageId: data.messageId });
+    } catch (error) {
+      console.error('[socket] delete_message failed', error);
+      socket.emit('app_error', { message: 'delete_failed' });
     }
   });
 

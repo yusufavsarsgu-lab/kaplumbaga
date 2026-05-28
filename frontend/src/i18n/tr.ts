@@ -54,6 +54,7 @@ export const tr: TranslationBundle = {
     translation: 'Çeviri',
     translationNotFound: 'Çeviri bulunamadı',
     translationFailed: 'Çeviri yapılamadı',
+    messageDeleted: 'Bu mesaj silindi',
     imageSelected: 'Resim seçildi',
     imageReady: 'Resim hazır',
     imagePreview: 'Göndermeden önce önizleme',

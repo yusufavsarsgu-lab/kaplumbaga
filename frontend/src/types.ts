@@ -26,6 +26,7 @@ export interface ChatMessage {
   status: TranslationStatus;
   provider?: TranslationProvider;
   deliveryStatus?: DeliveryStatus;
+  isDeleted?: boolean;
 }
 
 export interface LoginResponse {

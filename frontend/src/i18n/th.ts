@@ -54,6 +54,7 @@ export const th: TranslationBundle = {
     translation: 'คำแปล',
     translationNotFound: 'ไม่พบคำแปล',
     translationFailed: 'การแปลล้มเหลว',
+    messageDeleted: 'ข้อความนี้ถูกลบแล้ว',
     imageSelected: 'เลือกรูปภาพแล้ว',
     imageReady: 'รูปภาพพร้อมส่ง',
     imagePreview: 'ตัวอย่างก่อนส่ง',
